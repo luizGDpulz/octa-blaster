@@ -8,7 +8,7 @@ export default defineContentScript({
   allFrames: true,
   runAt: 'document_idle',
   main() {
-    console.log('[OctaBlaster v0.2.7] Content script inicializado no frame:', window.location.href);
+    console.log('[OctaBlaster v0.2.8] Content script inicializado no frame:', window.location.href);
     let lastActiveInput: HTMLElement | null = null;
     const processedRequests = new Set<string>();
 
@@ -230,8 +230,8 @@ export default defineContentScript({
       try {
         const editables = document.querySelectorAll<HTMLElement>('.note-editable');
         for (const el of Array.from(editables)) {
-          // Checagem rápida de visibilidade sem forçar reflow pesado
-          if (el.offsetWidth > 10 || el.offsetHeight > 10 || el.getClientRects().length > 0) {
+          const style = window.getComputedStyle(el);
+          if (style.display !== 'none' && style.visibility !== 'hidden') {
             return el;
           }
         }
@@ -242,64 +242,33 @@ export default defineContentScript({
     }
 
     function initWidgetLifecycle() {
-      let debounceTimer: number | undefined;
+      // Checagem imediata e depois a cada 800ms sem MutationObserver (0% de impacto na carga do Octadesk)
+      updateWidgetLifecycle();
+      window.setInterval(updateWidgetLifecycle, 800);
 
-      const scheduleCheck = () => {
-        if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = window.setTimeout(() => {
-          debounceTimer = undefined;
-          updateWidgetLifecycle();
-        }, 350);
-      };
-
-      // Executa a primeira checagem após carregamento inicial
-      scheduleCheck();
-
-      window.addEventListener('popstate', scheduleCheck);
-      window.addEventListener('hashchange', scheduleCheck);
-
-      const observer = new MutationObserver((mutations) => {
-        // Se a barra já está acoplada e conectada, ignora qualquer mutação para poupar 100% de CPU
-        if (activeWidget && activeWidget.isConnected) return;
-
-        // Ignora mutações internas do próprio widget
-        const isExternal = mutations.some((m) => {
-          const el = m.target as HTMLElement | null;
-          return !el?.closest?.('#octablaster-inpage-widget') && el?.id !== 'octablaster-inpage-styles';
-        });
-
-        if (isExternal) {
-          scheduleCheck();
-        }
-      });
-
-      if (document.body) {
-        observer.observe(document.body, { childList: true, subtree: true });
-      }
+      window.addEventListener('popstate', updateWidgetLifecycle);
+      window.addEventListener('hashchange', updateWidgetLifecycle);
     }
 
     function updateWidgetLifecycle() {
-      // Se o widget já está criado e conectado ao DOM, não re-insere (elimina loop)
+      // 1. Se o widget já está montado e conectado no DOM, só atualiza o botão de licença se necessário
       if (activeWidget && activeWidget.isConnected) {
         updateLicenseButton(activeWidget);
         return;
       }
 
-      const isTickets = isOctadeskTicketsContext();
-      if (!isTickets) return;
+      // 2. Só roda no contexto do Octadesk e em rotas de ticket
+      if (!isOctadeskTicketsContext()) return;
 
+      // 3. Procura o campo de edição do ticket
       const target = findVisibleNoteEditable();
-      if (!target) {
-        if (activeWidget) {
-          activeWidget.remove();
-          activeWidget = null;
-        }
-        return;
-      }
+      if (!target) return;
+
+      console.log('[OctaBlaster v0.2.8] Editor .note-editable encontrado! Montando barra...');
 
       ensureWidgetStyles(document);
 
-      // Localiza o container do Summernote (.note-editor) ou o pai direto
+      // 4. Localiza o container do Summernote (.note-editor) ou o container pai
       const editorBox = target.closest('.note-editor') as HTMLElement | null;
       const editingArea = (editorBox?.querySelector('.note-editing-area') as HTMLElement | null) || target;
       const mountParent = editorBox || target.parentElement;
@@ -308,10 +277,9 @@ export default defineContentScript({
 
       if (!activeWidget) {
         activeWidget = createWidgetElement();
-        console.log('[OctaBlaster v0.2.7] Barra de ações acoplada criada com sucesso!');
       }
 
-      // Insere uma única vez antes da área de edição
+      // 5. Insere a barra no topo da área de edição
       mountParent.insertBefore(activeWidget, editingArea);
       activeWidget.style.display = 'flex';
 
@@ -319,6 +287,7 @@ export default defineContentScript({
       if (editorBox) editorBox.style.overflow = 'visible';
 
       updateLicenseButton(activeWidget);
+      console.log('[OctaBlaster v0.2.8] Barra de ações acoplada com sucesso!');
     }
 
     function ensureWidgetStyles(doc: Document = document) {
