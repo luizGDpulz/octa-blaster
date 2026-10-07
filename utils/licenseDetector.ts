@@ -9,39 +9,57 @@ export interface LicenseTicketInfo {
 }
 
 /**
- * Detecta se a página atual do Octadesk exibe um ticket de licença
- * (Contratação, Troca ou Cancelamento).
+ * Obtém o contêiner isolado do ticket específico a partir de qualquer elemento interno.
+ * Garante que a busca de títulos e descrições fique restrita a este ticket,
+ * sem vazar dados de outros tickets abertos em abas concorrentes.
  */
-export function detectLicenseTicket(doc: Document = document): LicenseTicketInfo | null {
-  try {
-    const allDocs: Document[] = [];
-    function addDoc(d: Document | null | undefined) {
-      if (d && !allDocs.includes(d)) {
-        allDocs.push(d);
-        try {
-          const iframes = d.querySelectorAll<HTMLIFrameElement>('iframe');
-          for (const ifr of Array.from(iframes)) {
-            try {
-              const childDoc = ifr.contentDocument || ifr.contentWindow?.document;
-              if (childDoc) addDoc(childDoc);
-            } catch {}
-          }
-        } catch {}
-      }
+export function getScopedTicketContainer(el: HTMLElement): HTMLElement {
+  // 1. Tenta seletores diretos de container de ticket
+  const explicitContainer = el.closest<HTMLElement>(
+    '[ticket-id], [data-cy="ticket_content"], .ticket-container, .ticket-view, .ticket-page, .tab-pane, [role="tabpanel"], .box-white, [ticket]'
+  );
+  if (explicitContainer && explicitContainer !== el.ownerDocument.body) {
+    if (
+      explicitContainer.querySelector(
+        'h1, h2, h3, h4, [data-cy="ticket_title"], .ticket-subject, .ticket-title, .title-wrapper, [class*="ticket-title"], .interaction-description, .ticket-description, .message-content',
+      )
+    ) {
+      return explicitContainer;
     }
+  }
 
-    try {
-      if (window.top?.document) addDoc(window.top.document);
-    } catch {}
-    addDoc(doc);
+  // 2. Se não achou por seletor direto, sobe pelos ancestrais procurando o primeiro que contém título de ticket
+  let curr: HTMLElement | null = el.parentElement;
+  while (curr && curr !== curr.ownerDocument.body && curr !== curr.ownerDocument.documentElement) {
+    const hasTitle = curr.querySelector(
+      'h1, h2, h3, h4, [data-cy="ticket_title"], .ticket-subject, .ticket-title, .title-wrapper, [class*="ticket-title"]',
+    );
+    if (hasTitle) {
+      return curr;
+    }
+    curr = curr.parentElement;
+  }
 
+  return el.ownerDocument.body || el;
+}
+
+/**
+ * Detecta se o ticket (ou a página) do Octadesk exibe um ticket de licença
+ * (Contratação, Troca ou Cancelamento).
+ * Se um HTMLElement for fornecido, a verificação é estritamente isolada àquele ticket!
+ */
+export function detectLicenseTicket(scope: Document | HTMLElement = document): LicenseTicketInfo | null {
+  try {
     let detectedTitle = '';
     let detectedBody = '';
 
-    for (const d of allDocs) {
-      // 1. Busca por títulos de ticket no Octadesk (h1, h2, h3, .ticket-title, etc.)
-      const titleCandidates = d.querySelectorAll<HTMLElement>(
-        'h1, h2, h3, h4, [data-cy="ticket_title"], .ticket-subject, .ticket-title, .title-wrapper',
+    if (scope instanceof HTMLElement) {
+      // Escopo estrito no contêiner do ticket atual
+      const ticketContainer = getScopedTicketContainer(scope);
+
+      // 1. Busca títulos EXCLUSIVAMENTE dentro deste ticket
+      const titleCandidates = ticketContainer.querySelectorAll<HTMLElement>(
+        'h1, h2, h3, h4, [data-cy="ticket_title"], .ticket-subject, .ticket-title, .title-wrapper, [class*="ticket-title"]',
       );
 
       for (const el of Array.from(titleCandidates)) {
@@ -52,27 +70,80 @@ export function detectLicenseTicket(doc: Document = document): LicenseTicketInfo
         }
       }
 
-      // Se ainda não achou título específico, busca no título da página
-      if (!detectedTitle && /licen[cç]a/i.test(d.title)) {
-        detectedTitle = d.title;
+      if (!detectedTitle) {
+        for (const el of Array.from(titleCandidates)) {
+          const text = el.textContent?.trim() || '';
+          if (/licen[cç]a/i.test(text)) {
+            detectedTitle = text;
+            break;
+          }
+        }
       }
 
-      // 2. Busca pelo texto do corpo/descrição do ticket
-      const bodyElements = d.querySelectorAll<HTMLElement>(
+      // 2. Busca corpo/descrição EXCLUSIVAMENTE dentro deste ticket
+      const bodyElements = ticketContainer.querySelectorAll<HTMLElement>(
+        '.interaction-description, .ticket-description, .message-content, .interaction-card, [class*="interaction"], [class*="description"], p, pre',
+      );
+
+      for (const el of Array.from(bodyElements)) {
+        const text = el.textContent || '';
+        if (/licen[cç]a/i.test(text)) {
+          if (
+            text.includes('Nome da Revenda') ||
+            text.includes('Número do Banco de Dados') ||
+            text.includes('Número de Licenças')
+          ) {
+            detectedBody = text;
+            break;
+          }
+          if (!detectedBody && /(contrata[cç][aã]o|troca|cancelamento)/i.test(text)) {
+            detectedBody = text;
+          }
+        }
+      }
+    } else {
+      // Se chamado com Document, tenta primeiro encontrar o contêiner de abas do ticket ativo
+      const activeTabs = scope.querySelector<HTMLElement>(
+        'div.space-x-md[comment-type-selected], div.space-x-md[ticket], nav.subarea-tabs, .subarea-tabs',
+      );
+      if (activeTabs) {
+        return detectLicenseTicket(activeTabs);
+      }
+
+      // Fallback para varredura do documento
+      const titleCandidates = scope.querySelectorAll<HTMLElement>(
+        'h1, h2, h3, h4, [data-cy="ticket_title"], .ticket-subject, .ticket-title, .title-wrapper, [class*="ticket-title"]',
+      );
+
+      for (const el of Array.from(titleCandidates)) {
+        const text = el.textContent?.trim() || '';
+        if (/licen[cç]a/i.test(text) && /(contrata[cç][aã]o|troca|cancelamento)/i.test(text)) {
+          detectedTitle = text;
+          break;
+        }
+      }
+
+      if (!detectedTitle && /licen[cç]a/i.test(scope.title)) {
+        detectedTitle = scope.title;
+      }
+
+      const bodyElements = scope.querySelectorAll<HTMLElement>(
         '.interaction-description, .ticket-description, .message-content, .interaction-card, p, pre',
       );
 
       for (const el of Array.from(bodyElements)) {
         const text = el.textContent || '';
         if (text.includes('LICENÇA') || text.includes('Licença') || text.includes('licença')) {
-          if (text.includes('Nome da Revenda') || text.includes('Número do Banco de Dados') || text.includes('Número de Licenças')) {
+          if (
+            text.includes('Nome da Revenda') ||
+            text.includes('Número do Banco de Dados') ||
+            text.includes('Número de Licenças')
+          ) {
             detectedBody = text;
             break;
           }
         }
       }
-
-      if (detectedTitle && detectedBody) break;
     }
 
     // Se nem o título nem o corpo contêm padrões de licença, não é ticket de licença

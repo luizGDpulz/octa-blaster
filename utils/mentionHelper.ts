@@ -33,17 +33,47 @@ function getAllDocuments(rootDoc: Document = document): Document[] {
 /**
  * Verifica se a aba "Anotação interna" já está ativa no Octadesk.
  */
-export function isInternalNoteTabActive(doc: Document = document): boolean {
-  const allDocs = getAllDocuments(doc);
+export function isInternalNoteTabActive(scope: Document | HTMLElement = document): boolean {
+  if (scope instanceof HTMLElement) {
+    const activeInternalLi = scope.querySelector<HTMLElement>(
+      'li.active[ng-class*="commentTypeSelected === 3"], li.active.yellow[comment-type-selected="vm.commentTypeSelected"]',
+    );
+    if (activeInternalLi) return true;
+
+    const activeTabs = scope.querySelectorAll<HTMLElement>(
+      '.nav-comments li.active, .subarea-tabs li.active',
+    );
+    for (const tab of Array.from(activeTabs)) {
+      const text = (tab.textContent || '').toLowerCase();
+      if (text.includes('anotação') || text.includes('anotacao')) {
+        return true;
+      }
+    }
+
+    const internalCommentScope = scope.querySelector<HTMLElement>(
+      'div[ng-if*="typeInteractionSelected == 3"], div[ng-include*="comments/internal.html"]',
+    );
+    if (internalCommentScope && internalCommentScope.offsetParent !== null) {
+      return true;
+    }
+
+    // Se passou um elemento interno da aba, tenta no contêiner pai
+    const parentContainer = scope.closest<HTMLElement>('.space-x-md, .ticket-view, .box, [ticket]');
+    if (parentContainer && parentContainer !== scope) {
+      return isInternalNoteTabActive(parentContainer);
+    }
+
+    return false;
+  }
+
+  const allDocs = getAllDocuments(scope);
 
   for (const d of allDocs) {
-    // 1. Verifica no li específico do Octadesk com a classe active/yellow
     const activeInternalLi = d.querySelector<HTMLElement>(
       'li.active[ng-class*="commentTypeSelected === 3"], li.active.yellow[comment-type-selected="vm.commentTypeSelected"]',
     );
     if (activeInternalLi) return true;
 
-    // 2. Verifica se a aba ativa na barra de comentários contém texto "Anotação interna"
     const activeTabs = d.querySelectorAll<HTMLElement>(
       '.nav-comments li.active, .subarea-tabs li.active',
     );
@@ -54,7 +84,6 @@ export function isInternalNoteTabActive(doc: Document = document): boolean {
       }
     }
 
-    // 3. Verifica se a partial de internal comment está presente e ativa
     const internalCommentScope = d.querySelector<HTMLElement>(
       'div[ng-if*="typeInteractionSelected == 3"], div[ng-include*="comments/internal.html"]',
     );
@@ -73,8 +102,52 @@ export function isInternalNoteTabActive(doc: Document = document): boolean {
  *   <a ng-click="vm.commentTypeSelected = 3; vm.showReply = true"><i class="icon-edit"></i> Anotação interna</a>
  * </li>
  */
-export async function switchToInternalNote(doc: Document = document): Promise<boolean> {
-  const allDocs = getAllDocuments(doc);
+export async function switchToInternalNote(scope: Document | HTMLElement = document): Promise<boolean> {
+  if (isInternalNoteTabActive(scope)) {
+    return true;
+  }
+
+  if (scope instanceof HTMLElement) {
+    const searchTarget: HTMLElement =
+      scope.closest<HTMLElement>('.space-x-md, .ticket-view, .box, [ticket]') || scope;
+
+    const specificLink = searchTarget.querySelector<HTMLElement>(
+      'a[ng-click*="commentTypeSelected = 3"], li[ng-class*="commentTypeSelected === 3"] > a',
+    );
+
+    if (specificLink) {
+      specificLink.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      specificLink.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+      specificLink.click();
+      await sleep(300);
+      return true;
+    }
+
+    const navItems = searchTarget.querySelectorAll<HTMLElement>(
+      '.nav-comments a, .subarea-tabs a, .nav-tabs a, nav a',
+    );
+    for (const item of Array.from(navItems)) {
+      const text = (item.textContent || '').trim().toLowerCase();
+      if (
+        (text.includes('anotação interna') || text.includes('anotacao interna')) &&
+        !item.classList.contains('favorite')
+      ) {
+        item.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+        item.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+        item.click();
+        await sleep(300);
+        return true;
+      }
+    }
+
+    // Se não encontrou no elemento, tenta no ownerDocument
+    if (scope.ownerDocument) {
+      return switchToInternalNote(scope.ownerDocument);
+    }
+    return false;
+  }
+
+  const allDocs = getAllDocuments(scope);
 
   for (const d of allDocs) {
     if (isInternalNoteTabActive(d)) {
@@ -87,7 +160,6 @@ export async function switchToInternalNote(doc: Document = document): Promise<bo
     );
 
     if (specificLink) {
-      // Dispara eventos de clique no link da aba (não na estrelinha de favorito)
       specificLink.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
       specificLink.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
       specificLink.click();
@@ -121,18 +193,16 @@ export async function switchToInternalNote(doc: Document = document): Promise<bo
  * Aguarda o AngularJS renderizar e exibir o editor de Anotação Interna no DOM
  */
 export async function waitForInternalNoteEditor(
-  doc: Document = document,
+  scope: Document | HTMLElement = document,
   maxWaitMs: number = 4000,
 ): Promise<HTMLElement | null> {
   const startTime = Date.now();
 
   while (Date.now() - startTime < maxWaitMs) {
-    const allDocs = getAllDocuments(doc);
-
-    for (const d of allDocs) {
-      const isInternal = isInternalNoteTabActive(d);
-      const editables = d.querySelectorAll<HTMLElement>('.note-editable');
-
+    if (scope instanceof HTMLElement) {
+      const targetContainer =
+        scope.closest<HTMLElement>('.space-x-md, .ticket-view, .box, [ticket]') || scope.parentElement || scope;
+      const editables = targetContainer.querySelectorAll<HTMLElement>('.note-editable');
       for (const el of Array.from(editables)) {
         const rect = el.getBoundingClientRect();
         const win = el.ownerDocument.defaultView || window;
@@ -143,8 +213,28 @@ export async function waitForInternalNoteEditor(
           style.display !== 'none' &&
           style.visibility !== 'hidden'
         ) {
-          if (isInternal) {
-            return el;
+          return el;
+        }
+      }
+    } else {
+      const allDocs = getAllDocuments(scope);
+      for (const d of allDocs) {
+        const isInternal = isInternalNoteTabActive(d);
+        const editables = d.querySelectorAll<HTMLElement>('.note-editable');
+
+        for (const el of Array.from(editables)) {
+          const rect = el.getBoundingClientRect();
+          const win = el.ownerDocument.defaultView || window;
+          const style = win.getComputedStyle(el);
+          if (
+            rect.width > 30 &&
+            rect.height > 20 &&
+            style.display !== 'none' &&
+            style.visibility !== 'hidden'
+          ) {
+            if (isInternal) {
+              return el;
+            }
           }
         }
       }
@@ -153,7 +243,10 @@ export async function waitForInternalNoteEditor(
     await sleep(100);
   }
 
-  return doc.querySelector<HTMLElement>('.note-editable');
+  if (scope instanceof HTMLElement) {
+    return scope.querySelector<HTMLElement>('.note-editable') || scope.ownerDocument.querySelector<HTMLElement>('.note-editable');
+  }
+  return scope.querySelector<HTMLElement>('.note-editable');
 }
 
 /**
@@ -207,20 +300,22 @@ async function selectPersonFromPopover(
 export async function automateLicenseMentions(
   editor?: HTMLElement | null,
   doc: Document = document,
+  scope?: HTMLElement | null,
 ): Promise<{ success: boolean; message: string }> {
   try {
-    const targetDoc = editor?.ownerDocument || doc;
+    const targetDoc = editor?.ownerDocument || scope?.ownerDocument || doc;
+    const targetScope: HTMLElement | Document = scope || targetDoc;
     let targetEditor = editor;
 
     // Passo 1: Garantir que está na aba de Anotação Interna
-    const isAlreadyInternal = isInternalNoteTabActive(targetDoc);
+    const isAlreadyInternal = isInternalNoteTabActive(targetScope);
     if (!isAlreadyInternal) {
       console.log('[OctaBlaster] Resposta pública detectada. Alternando para Anotação interna...');
-      await switchToInternalNote(targetDoc);
+      await switchToInternalNote(targetScope);
       // Aguarda o Angular renderizar o novo editor Summernote da Anotação interna
-      targetEditor = await waitForInternalNoteEditor(targetDoc, 4000);
+      targetEditor = await waitForInternalNoteEditor(targetScope, 4000);
     } else if (!targetEditor) {
-      targetEditor = await waitForInternalNoteEditor(targetDoc, 2000);
+      targetEditor = await waitForInternalNoteEditor(targetScope, 2000);
     }
 
     if (!targetEditor) {

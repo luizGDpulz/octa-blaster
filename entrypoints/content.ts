@@ -9,7 +9,7 @@ export default defineContentScript({
   matchAboutBlank: true,
   runAt: 'document_idle',
   main() {
-    console.log('[OctaBlaster v0.3.2] Content script inicializado no frame:', window.location.href);
+    console.log('[OctaBlaster v0.3.3] Content script inicializado no frame:', window.location.href);
     let lastActiveInput: HTMLElement | null = null;
     const processedRequests = new Set<string>();
 
@@ -210,10 +210,9 @@ export default defineContentScript({
 
     // =========================================================================
     // =========================================================================
-    // WIDGET ACOPLADO AO CAMPO DE TICKETS (Somente em *.octadesk.com e em tickets)
+    // WIDGET ACOPLADO AO CAMPO DE TICKETS (MULTI-INSTÂNCIA POR TICKET)
     // =========================================================================
-    let activeWidget: HTMLElement | null = null;
-    let isExpanded = false;
+    // =========================================================================
 
     function isOctadeskTicketsContext(): boolean {
       try {
@@ -224,43 +223,51 @@ export default defineContentScript({
           topHref = window.top?.location?.href?.toLowerCase() || '';
         } catch {}
 
-        // Valida se o domínio pertence ao Octadesk ou localhost
         const isOctaHost =
           host.includes('octadesk.com') ||
           host === 'localhost' ||
           topHref.includes('octadesk.com');
         if (!isOctaHost) return false;
 
-        // Valida se é uma rota de ticket
         return href.includes('ticket') || topHref.includes('ticket');
       } catch {
         return false;
       }
     }
 
-    function findVisibleNoteEditable(rootDoc: Document = document): HTMLElement | null {
+    function getAllAccessibleDocuments(rootDoc: Document = document): Document[] {
       const allDocs: Document[] = [];
-
-      function collectDocs(d: Document | null | undefined) {
-        if (!d || allDocs.includes(d)) return;
-        allDocs.push(d);
-        try {
-          const iframes = d.querySelectorAll<HTMLIFrameElement>('iframe');
-          for (const ifr of Array.from(iframes)) {
-            try {
-              const childDoc = ifr.contentDocument || ifr.contentWindow?.document;
-              if (childDoc) collectDocs(childDoc);
-            } catch {}
-          }
-        } catch {}
+      function add(d: Document | null | undefined) {
+        if (d && !allDocs.includes(d)) {
+          allDocs.push(d);
+          try {
+            const iframes = d.querySelectorAll<HTMLIFrameElement>('iframe');
+            for (const ifr of Array.from(iframes)) {
+              try {
+                const childDoc = ifr.contentDocument || ifr.contentWindow?.document;
+                if (childDoc) add(childDoc);
+              } catch {}
+            }
+          } catch {}
+        }
       }
 
       try {
-        if (window.top?.document) {
-          collectDocs(window.top.document);
-        }
+        if (window.top?.document) add(window.top.document);
       } catch {}
-      collectDocs(rootDoc);
+      add(rootDoc);
+      return allDocs;
+    }
+
+    function isElementVisible(el: HTMLElement): boolean {
+      if (!el.isConnected) return false;
+      const win = el.ownerDocument.defaultView || window;
+      const style = win.getComputedStyle(el);
+      return style.display !== 'none' && style.visibility !== 'hidden';
+    }
+
+    function findVisibleNoteEditable(rootDoc: Document = document): HTMLElement | null {
+      const allDocs = getAllAccessibleDocuments(rootDoc);
 
       const selectors = [
         '.note-editable',
@@ -275,15 +282,8 @@ export default defineContentScript({
           for (const selector of selectors) {
             const candidates = d.querySelectorAll<HTMLElement>(selector);
             for (const el of Array.from(candidates)) {
-              const win = el.ownerDocument.defaultView || window;
-              const style = win.getComputedStyle(el);
               const rect = el.getBoundingClientRect();
-              if (
-                rect.width >= 50 &&
-                rect.height >= 30 &&
-                style.display !== 'none' &&
-                style.visibility !== 'hidden'
-              ) {
+              if (rect.width >= 50 && rect.height >= 30 && isElementVisible(el)) {
                 return el;
               }
             }
@@ -291,162 +291,74 @@ export default defineContentScript({
         } catch {}
       }
 
-      // Fallback: qualquer [contenteditable="true"] com tamanho visível
+      return null;
+    }
+
+    /**
+     * Localiza todas as barras de abas de tickets presentes nos documentos abertos
+     */
+    function findTicketTabContainers(rootDoc: Document = document): HTMLElement[] {
+      const allDocs = getAllAccessibleDocuments(rootDoc);
+      const results: HTMLElement[] = [];
+
       for (const d of allDocs) {
         try {
-          const editables = d.querySelectorAll<HTMLElement>('[contenteditable="true"]');
-          for (const el of Array.from(editables)) {
-            const win = el.ownerDocument.defaultView || window;
-            const style = win.getComputedStyle(el);
-            const rect = el.getBoundingClientRect();
+          // 1. Prioridade: contêineres space-x-md de comentários de tickets
+          const spaceContainers = d.querySelectorAll<HTMLElement>(
+            'div.space-x-md[comment-type-selected], div.space-x-md[ticket], div.space-x-md',
+          );
+          for (const el of Array.from(spaceContainers)) {
             if (
-              rect.width >= 50 &&
-              rect.height >= 30 &&
-              style.display !== 'none' &&
-              style.visibility !== 'hidden'
+              el.querySelector('.nav-comments, .subarea-tabs, [ng-click*="commentTypeSelected"]') ||
+              el.hasAttribute('comment-type-selected') ||
+              el.hasAttribute('ticket')
             ) {
-              return el;
+              if (el.isConnected && !results.includes(el)) {
+                results.push(el);
+              }
             }
           }
-        } catch {}
-      }
 
-      return null;
-    }
-
-    function findTabsContainer(rootDoc: Document = document): HTMLElement | null {
-      const allDocs: Document[] = [];
-
-      function collectDocs(d: Document | null | undefined) {
-        if (!d || allDocs.includes(d)) return;
-        allDocs.push(d);
-        try {
-          const iframes = d.querySelectorAll<HTMLIFrameElement>('iframe');
-          for (const ifr of Array.from(iframes)) {
-            try {
-              const childDoc = ifr.contentDocument || ifr.contentWindow?.document;
-              if (childDoc) collectDocs(childDoc);
-            } catch {}
-          }
-        } catch {}
-      }
-
-      try {
-        if (window.top?.document) {
-          collectDocs(window.top.document);
-        }
-      } catch {}
-      collectDocs(rootDoc);
-
-      const selectors = [
-        'div.space-x-md[comment-type-selected]',
-        'div.space-x-md[ticket]',
-        'div.space-x-md',
-        'nav.subarea-tabs',
-        '.subarea-tabs',
-        'ul.nav-comments',
-      ];
-
-      for (const d of allDocs) {
-        try {
-          for (const selector of selectors) {
-            const el = d.querySelector<HTMLElement>(selector);
-            if (el) {
-              const win = el.ownerDocument.defaultView || window;
-              const style = win.getComputedStyle(el);
-              if (style.display !== 'none' && style.visibility !== 'hidden') {
-                return el;
+          // 2. Se não encontrou space-x-md neste doc, busca por nav.subarea-tabs
+          if (results.length === 0) {
+            const subareaNavs = d.querySelectorAll<HTMLElement>('nav.subarea-tabs, .subarea-tabs');
+            for (const el of Array.from(subareaNavs)) {
+              const parent = el.parentElement && el.parentElement.tagName === 'DIV' ? el.parentElement : el;
+              if (parent.isConnected && !results.includes(parent)) {
+                results.push(parent);
               }
             }
           }
         } catch {}
       }
 
-      return null;
+      return results;
     }
 
-    function initWidgetLifecycle() {
-      updateWidgetLifecycle();
-      window.setInterval(updateWidgetLifecycle, 800);
+    /**
+     * Encontra o editor de texto correspondente a um widget específico dentro do ticket
+     */
+    function findEditorForWidget(widget: HTMLElement, container: HTMLElement): HTMLElement | null {
+      // 1. Tenta encontrar no mesmo contêiner ou bloco do ticket
+      const ticketRoot =
+        container.closest<HTMLElement>(
+          '[ticket], [ticket-id], [data-cy="ticket_content"], .ticket-container, .ticket-view, .ticket-page, .box-white, .box',
+        ) || container.parentElement;
 
-      window.addEventListener('popstate', () => setTimeout(updateWidgetLifecycle, 600));
-      window.addEventListener('hashchange', () => setTimeout(updateWidgetLifecycle, 600));
-    }
-
-    function startWhenReady() {
-      console.log('[OctaBlaster v0.3.2] Aguardando estabilização do carregamento da página...');
-      const start = () => {
-        // Aguarda 1.2s para garantir que AngularJS/SPA finalizou a renderização inicial
-        setTimeout(initWidgetLifecycle, 1200);
-      };
-
-      if (document.readyState === 'complete') {
-        start();
-      } else {
-        window.addEventListener('load', start, { once: true });
-        // Fallback de segurança se o evento já disparou
-        setTimeout(start, 2500);
-      }
-    }
-
-    function updateWidgetLifecycle() {
-      // 1. Só roda no contexto do Octadesk e em rotas de ticket
-      if (!isOctadeskTicketsContext()) {
-        if (activeWidget && activeWidget.isConnected) {
-          activeWidget.remove();
+      if (ticketRoot) {
+        const editables = ticketRoot.querySelectorAll<HTMLElement>(
+          '.note-editable[contenteditable="true"], .note-editable, [contenteditable="true"]:not([aria-hidden="true"]), textarea:not([disabled])',
+        );
+        for (const el of Array.from(editables)) {
+          const rect = el.getBoundingClientRect();
+          if (rect.width > 20 && rect.height > 20 && isElementVisible(el)) {
+            return el;
+          }
         }
-        return;
       }
 
-      // 2. Prioriza a ancoragem na barra de abas externa (.space-x-md / .subarea-tabs)
-      //    Isso garante que o botão não dependa do tamanho do campo de texto e não seja recortado por overflow
-      const tabsBar = findTabsContainer(document);
-      const targetEditor = findVisibleNoteEditable(document);
-
-      const mountAnchor =
-        tabsBar ||
-        (targetEditor
-          ? (targetEditor.closest('.note-editor') as HTMLElement | null) || targetEditor.parentElement
-          : null);
-
-      if (!mountAnchor) return;
-
-      const targetDoc = mountAnchor.ownerDocument || document;
-
-      // 3. Se já existe um widget montado neste documento, apenas atualiza
-      const existingWidget = targetDoc.getElementById('octablaster-floating-widget');
-      if (existingWidget && existingWidget.isConnected) {
-        activeWidget = existingWidget;
-        updateLicenseButton(activeWidget, targetDoc);
-        return;
-      }
-
-      // 4. Assegura que o contêiner suporte position: absolute e não corte o dropdown
-      const win = targetDoc.defaultView || window;
-      const compPos = win.getComputedStyle(mountAnchor).position;
-      if (compPos === 'static') {
-        mountAnchor.style.position = 'relative';
-      }
-      mountAnchor.style.overflow = 'visible';
-
-      const parentBox = mountAnchor.closest('.box, .box-white, .box-bordered') as HTMLElement | null;
-      if (parentBox) {
-        parentBox.style.overflow = 'visible';
-      }
-
-      ensureWidgetStyles(targetDoc);
-
-      if (!activeWidget || activeWidget.ownerDocument !== targetDoc) {
-        activeWidget = createWidgetElement(targetDoc);
-      }
-
-      // 5. Anexa o botão flutuante na barra de abas externa
-      if (!mountAnchor.contains(activeWidget)) {
-        mountAnchor.appendChild(activeWidget);
-      }
-
-      updateLicenseButton(activeWidget, targetDoc);
-      console.log(`[OctaBlaster v0.3.2] Widget ancorado na barra de abas externa (${targetDoc.location?.href || 'iframe'}):`, mountAnchor);
+      // 2. Fallback: busca no mesmo documento do widget
+      return findVisibleNoteEditable(widget.ownerDocument) || findBestEditableElement();
     }
 
     function ensureWidgetStyles(doc: Document = document) {
@@ -456,7 +368,7 @@ export default defineContentScript({
       const style = doc.createElement('style');
       style.id = STYLE_ID;
       style.textContent = `
-        #octablaster-floating-widget {
+        .octablaster-floating-widget {
           position: absolute !important;
           top: 4px !important;
           right: 8px !important;
@@ -474,11 +386,11 @@ export default defineContentScript({
           align-items: center !important;
           background: #1c1b1c !important;
           color: #ffffff !important;
-          border-radius: 20px !important;
+          border-radius: 18px !important;
           padding: 3px 6px !important;
           box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45) !important;
           border: 1px solid #3c3f43 !important;
-          transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
           user-select: none !important;
         }
         .octa-bar-container:hover {
@@ -498,29 +410,23 @@ export default defineContentScript({
           font-size: 12px !important;
           border-radius: 14px !important;
           transition: background 0.15s !important;
+          outline: none !important;
         }
         .octa-pill-btn:hover {
           background: rgba(255, 255, 255, 0.1) !important;
         }
         .octa-badge-dot {
-          width: 8px !important;
-          height: 8px !important;
+          width: 7px !important;
+          height: 7px !important;
           background: #ffc600 !important;
           border-radius: 50% !important;
           display: inline-block !important;
           box-shadow: 0 0 6px #ffc600 !important;
           animation: octa-pulse-dot 1.6s infinite !important;
-          margin-left: -2px !important;
         }
         @keyframes octa-pulse-dot {
           0%, 100% { transform: scale(1); opacity: 1; }
           50% { transform: scale(1.4); opacity: 0.5; }
-        }
-        .octa-bar-text {
-          color: #dee0e4 !important;
-          font-size: 11px !important;
-          font-weight: 700 !important;
-          letter-spacing: 0.3px !important;
         }
         .octa-logo-svg {
           flex-shrink: 0 !important;
@@ -530,7 +436,7 @@ export default defineContentScript({
           display: flex !important;
           align-items: center !important;
           gap: 6px !important;
-          margin-left: 4px !important;
+          margin-left: 3px !important;
           transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
         }
         .octa-action-btn {
@@ -544,6 +450,7 @@ export default defineContentScript({
           cursor: pointer !important;
           transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1) !important;
           white-space: nowrap !important;
+          outline: none !important;
         }
         .octa-action-btn:hover {
           background: #5b5f63 !important;
@@ -572,6 +479,7 @@ export default defineContentScript({
           padding: 2px 6px !important;
           border-radius: 50% !important;
           transition: all 0.15s !important;
+          outline: none !important;
         }
         .octa-min-btn:hover {
           color: #ffffff !important;
@@ -645,52 +553,55 @@ export default defineContentScript({
       (doc.head || doc.documentElement).appendChild(style);
     }
 
-    function createWidgetElement(doc: Document = document): HTMLElement {
+    /**
+     * Cria uma instância isolada do botão flutuante para um contêiner de ticket específico
+     */
+    function createWidgetElement(doc: Document, container: HTMLElement): HTMLElement {
       const widget = doc.createElement('div');
-      widget.id = 'octablaster-floating-widget';
+      widget.className = 'octablaster-floating-widget';
+      widget.dataset.expanded = 'false';
+
       widget.innerHTML = `
         <div class="octa-bar-container">
-          <button type="button" id="octa-btn-toggle" class="octa-pill-btn" title="OctaBlaster (Clique para expandir)">
+          <button type="button" class="octa-pill-btn octa-btn-toggle" title="OctaBlaster (Clique para expandir)">
             <svg class="octa-logo-svg" viewBox="0 0 498.69 498.69" width="16" height="16" fill="#ffc600" aria-hidden="true">
               <path d="M6.14,102C11.14,49.59,49.47,10.93,101.89,6,137.18,2.69,185.36,0,249.34,0s114.33,2.76,149.83,6.18c51.07,4.92,88.41,42.26,93.34,93.34,3.42,35.5,6.18,84.39,6.18,149.83s-2.76,114.32-6.18,149.82c-4.93,51.08-42.27,88.42-93.34,93.34-35.5,3.42-84.4,6.18-149.83,6.18s-112.16-2.63-147.45-6c-52.42-4.93-90.73-43.59-95.75-96C2.74,361.07,0,312.69,0,249.3S2.72,137.57,6.14,102m392.8,209.12c-3.01-11.83-15.03-18.98-26.86-16-6.28,1.42-12.77,1.74-19.16,.93-15.58-1.65-36-16.44-39.76-37.9-1.09-12.34,4.58-21.56,11.24-31.43,9-13.28,17.33-29.82,17.33-51.11,0-47.74-43.63-90.33-92.34-90.33s-93.78,39.72-93.78,90.28c0,21.29,9.82,37.83,18.82,51.11,6.66,9.88,12.33,19.08,11.24,31.43-1.08,17.13-24.21,36.25-39.76,37.9-6.39,.81-12.88,.49-19.16-.93-11.84-3.01-23.88,4.15-26.89,15.99h0c-1.43,5.69-.54,11.71,2.47,16.73,3.02,5.03,7.92,8.66,13.61,10.08,7.41,1.82,15.02,2.72,22.65,2.68,4.01,0,8.02-.22,12-.65,9.92-.9,19.58-3.65,28.48-8.11,5.4-1.37,10.41-3.95,14.65-7.55,2.42-1.88,4-3.09,5.28-2.21,3,2,2.76,4.6,1.58,7.5-.26,.58-.53,1.16-.81,1.73-.92,1.67-1.92,3.29-3,4.85-.63,.94-1.23,1.84-1.73,2.65-2.89,4.73-.49,1.07,4-5.91-1.8,3.46-3.85,6.79-6.14,9.95-9,12.35-16.76,21.68-23.8,28.54-6.41,6.23-8.42,15.71-5.08,24,4.62,11.35,17.56,16.81,28.92,12.19,2.64-1.07,5.04-2.64,7.08-4.62,8.85-8.63,18.26-19.8,28.7-34.2,8.75-12.12,15.27-25.7,19.26-40.11,.64-.84,1.51-1.47,2.51-1.8,3.95,15.06,10.65,29.27,19.75,41.91,10.48,14.4,19.86,25.57,28.71,34.2,8.71,8.55,22.71,8.41,31.26-.3s8.41-22.71-.31-31.25c-7-6.86-14.82-16.19-23.8-28.54-4.56-6.33-8.18-13.29-10.74-20.66,.44-.77,1.06-1.43,1.81-1.91,1.33-.86,2.87,.35,5.27,2.22,3.96,3.36,8.58,5.84,13.57,7.29,8.7,5.2,19.1,8.8,32.23,10.19,3.99,.43,7.99,.65,12,.65,7.63,.04,15.24-.86,22.65-2.68,8.69-2.16,15.22-9.36,16.52-18.22,.42-2.88,.26-5.81-.47-8.62v.05Zm-141.94-122c0,14.66,7.93,18.34,17.72,18.34s17.69-3.69,17.69-18.34-8-21.44-17.82-21.44-17.59,6.74-17.59,21.4v.04Zm-52.67,0c0,14.53,7.85,18.11,17.54,18.11s17.53-3.59,17.53-18.11-7.92-21.2-17.66-21.2-17.41,6.64-17.41,21.16v.04Z" />
             </svg>
-            <span id="octa-bar-label" class="octa-bar-text" style="display: none;">OctaBlaster</span>
-            <span id="octa-license-badge" class="octa-badge-dot" style="display: none;" title="Ticket de licença detectado!"></span>
+            <span class="octa-license-badge octa-badge-dot" style="display: none;" title="Ticket de licença detectado!"></span>
           </button>
           
-          <div id="octa-bar-actions" class="octa-bar-actions" style="display: none;">
+          <div class="octa-bar-actions" style="display: none;">
             <!-- Botão de licença inserido dinamicamente se detectado -->
-            <button type="button" id="octa-btn-license" class="octa-action-btn octa-license-btn" style="display: none;" title="Mudar para nota interna e marcar @Jorge Tigre e @Roberto Renck">
+            <button type="button" class="octa-action-btn octa-license-btn octa-btn-license" style="display: none;" title="Mudar para anotação interna e marcar @Jorge Tigre e @Roberto Renck">
               🏷️ Marcar Licenças
             </button>
 
             <!-- Menu de Respostas Rápidas -->
-            <button type="button" id="octa-btn-replies" class="octa-action-btn" title="Abrir Respostas Rápidas">
+            <button type="button" class="octa-action-btn octa-btn-replies" title="Abrir Respostas Rápidas">
               📋 Respostas
             </button>
 
-            <button type="button" id="octa-btn-minimize" class="octa-min-btn" title="Recolher">✕</button>
+            <button type="button" class="octa-min-btn octa-btn-minimize" title="Recolher">✕</button>
           </div>
 
           <!-- Dropdown com os modelos salvos -->
-          <div id="octa-dropdown-menu" class="octa-dropdown" style="display: none;">
+          <div class="octa-dropdown octa-dropdown-menu" style="display: none;">
             <div class="octa-dropdown-header">Modelos de Resposta</div>
-            <div id="octa-dropdown-list" class="octa-dropdown-list">
+            <div class="octa-dropdown-list">
               <div class="octa-dropdown-empty">Carregando modelos...</div>
             </div>
           </div>
         </div>
       `;
 
-      const btnToggle = widget.querySelector('#octa-btn-toggle') as HTMLElement;
-      const barLabel = widget.querySelector('#octa-bar-label') as HTMLElement;
-      const licenseBadge = widget.querySelector('#octa-license-badge') as HTMLElement;
-      const barActions = widget.querySelector('#octa-bar-actions') as HTMLElement;
-      const btnLicense = widget.querySelector('#octa-btn-license') as HTMLElement;
-      const btnReplies = widget.querySelector('#octa-btn-replies') as HTMLElement;
-      const btnMinimize = widget.querySelector('#octa-btn-minimize') as HTMLElement;
-      const dropdownMenu = widget.querySelector('#octa-dropdown-menu') as HTMLElement;
-      const dropdownList = widget.querySelector('#octa-dropdown-list') as HTMLElement;
+      const btnToggle = widget.querySelector('.octa-btn-toggle') as HTMLElement;
+      const licenseBadge = widget.querySelector('.octa-license-badge') as HTMLElement;
+      const barActions = widget.querySelector('.octa-bar-actions') as HTMLElement;
+      const btnLicense = widget.querySelector('.octa-btn-license') as HTMLElement;
+      const btnReplies = widget.querySelector('.octa-btn-replies') as HTMLElement;
+      const btnMinimize = widget.querySelector('.octa-btn-minimize') as HTMLElement;
+      const dropdownMenu = widget.querySelector('.octa-dropdown-menu') as HTMLElement;
+      const dropdownList = widget.querySelector('.octa-dropdown-list') as HTMLElement;
 
       // Trava contra submit do formulário que engloba o editor no Octadesk
       widget.addEventListener('submit', (e) => {
@@ -699,18 +610,16 @@ export default defineContentScript({
       });
 
       function setExpanded(expanded: boolean) {
-        isExpanded = expanded;
+        widget.dataset.expanded = expanded ? 'true' : 'false';
         if (expanded) {
           barActions.style.display = 'flex';
-          barLabel.style.display = 'inline';
           btnToggle.title = 'OctaBlaster';
           licenseBadge.style.display = 'none';
         } else {
           barActions.style.display = 'none';
-          barLabel.style.display = 'none';
           dropdownMenu.style.display = 'none';
           btnToggle.title = 'OctaBlaster (Clique para expandir)';
-          updateLicenseButton(widget, doc);
+          updateLicenseButton(widget, container);
         }
       }
 
@@ -722,7 +631,8 @@ export default defineContentScript({
       btnToggle.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        setExpanded(!isExpanded);
+        const isCurrentExpanded = widget.dataset.expanded === 'true';
+        setExpanded(!isCurrentExpanded);
       });
 
       btnMinimize.addEventListener('mousedown', (e) => {
@@ -748,16 +658,16 @@ export default defineContentScript({
         btnLicense.textContent = '⏳ Marcando...';
         btnLicense.style.opacity = '0.7';
 
-        const target = findVisibleNoteEditable(doc) || findBestEditableElement();
-        const targetDoc = target?.ownerDocument || doc;
-        const res = await automateLicenseMentions(target, targetDoc);
+        const localEditor = findEditorForWidget(widget, container);
+        const targetDoc = localEditor?.ownerDocument || doc;
+        const res = await automateLicenseMentions(localEditor, targetDoc, container);
         if (res.success) {
           btnLicense.textContent = '✅ Marcados!';
         } else {
           btnLicense.textContent = '❌ Tente novamente';
         }
 
-        setTimeout(() => updateLicenseButton(widget, targetDoc), 2500);
+        setTimeout(() => updateLicenseButton(widget, container), 2500);
       });
 
       // Dropdown de respostas rápidas
@@ -777,7 +687,6 @@ export default defineContentScript({
 
         dropdownMenu.style.display = 'block';
 
-        // Carrega modelos do storage
         try {
           const data = await browser.storage.local.get('octablaster_quick_replies_v2');
           const templates = (data.octablaster_quick_replies_v2 as QuickReplyTemplate[]) || [];
@@ -805,11 +714,11 @@ export default defineContentScript({
             itemBtn.addEventListener('click', (e) => {
               e.preventDefault();
               e.stopPropagation();
-              const target = findVisibleNoteEditable(doc) || findBestEditableElement();
+              const target = findEditorForWidget(widget, container);
               if (target) {
-                // Resolve variável {{Saudacao}}
                 const hour = new Date().getHours();
-                const greeting = hour >= 5 && hour < 12 ? 'Bom dia' : hour >= 12 && hour < 18 ? 'Boa tarde' : 'Boa noite';
+                const greeting =
+                  hour >= 5 && hour < 12 ? 'Bom dia' : hour >= 12 && hour < 18 ? 'Boa tarde' : 'Boa noite';
                 const processed = tpl.content
                   .replace(/(?:\{\{|\{)\s*sauda[cç][aã]o\s*(?:\}\}|\})!+/gi, `${greeting}!`)
                   .replace(/(?:\{\{|\{)\s*sauda[cç][aã]o\s*(?:\}\}|\}),/gi, `${greeting},`)
@@ -830,14 +739,18 @@ export default defineContentScript({
         }
       });
 
-      // Fecha dropdown ao clicar fora
-      doc.addEventListener('click', () => {
-        dropdownMenu.style.display = 'none';
+      // Fecha dropdown se clicar fora deste widget
+      doc.addEventListener('click', (e) => {
+        if (!widget.contains(e.target as Node)) {
+          dropdownMenu.style.display = 'none';
+        }
       });
       if (window.top?.document && window.top.document !== doc) {
         try {
-          window.top.document.addEventListener('click', () => {
-            dropdownMenu.style.display = 'none';
+          window.top.document.addEventListener('click', (e) => {
+            if (!widget.contains(e.target as Node)) {
+              dropdownMenu.style.display = 'none';
+            }
           });
         } catch {}
       }
@@ -845,13 +758,18 @@ export default defineContentScript({
       return widget;
     }
 
-    function updateLicenseButton(widget: HTMLElement, doc: Document = document) {
-      const btnLicense = widget.querySelector('#octa-btn-license') as HTMLElement | null;
-      const licenseBadge = widget.querySelector('#octa-license-badge') as HTMLElement | null;
+    /**
+     * Atualiza o estado do botão de licença especificamente para o ticket a que pertence
+     */
+    function updateLicenseButton(widget: HTMLElement, container: HTMLElement) {
+      const btnLicense = widget.querySelector('.octa-btn-license') as HTMLElement | null;
+      const licenseBadge = widget.querySelector('.octa-license-badge') as HTMLElement | null;
       if (!btnLicense) return;
 
-      const info = detectLicenseTicket(doc);
-      if (info && info.isLicenseTicket) {
+      const info = detectLicenseTicket(container);
+      const isLicense = !!(info && info.isLicenseTicket);
+
+      if (isLicense) {
         const typeLabel = info.type !== 'Outro' ? info.type : 'Licença';
         const newText = `🏷️ Marcar (${typeLabel})`;
         if (btnLicense.textContent !== newText) {
@@ -859,18 +777,116 @@ export default defineContentScript({
         }
         btnLicense.style.display = 'inline-flex';
 
+        const isExpanded = widget.dataset.expanded === 'true';
         if (licenseBadge) {
           licenseBadge.style.display = isExpanded ? 'none' : 'inline-block';
+        }
+        if (!isExpanded) {
+          const btnToggle = widget.querySelector('.octa-btn-toggle') as HTMLElement | null;
+          if (btnToggle) {
+            btnToggle.title = `OctaBlaster - Ticket de Licença (${typeLabel}) detectado! (Clique para expandir)`;
+          }
         }
       } else {
         btnLicense.style.display = 'none';
         if (licenseBadge) {
           licenseBadge.style.display = 'none';
         }
+        if (widget.dataset.expanded !== 'true') {
+          const btnToggle = widget.querySelector('.octa-btn-toggle') as HTMLElement | null;
+          if (btnToggle) {
+            btnToggle.title = 'OctaBlaster (Clique para expandir)';
+          }
+        }
       }
     }
 
-    // Inicializa o ciclo de vida aguardando a estabilização completa da página
+    /**
+     * Ciclo de vida: verifica e anexa o widget em cada ticket aberto na tela
+     */
+    function updateWidgetLifecycle() {
+      if (!isOctadeskTicketsContext()) {
+        const allWidgets = document.querySelectorAll('.octablaster-floating-widget');
+        allWidgets.forEach((w) => w.remove());
+        return;
+      }
+
+      const containers = findTicketTabContainers(document);
+
+      if (containers.length > 0) {
+        for (const container of containers) {
+          const targetDoc = container.ownerDocument || document;
+          const existingWidget = container.querySelector<HTMLElement>('.octablaster-floating-widget');
+
+          if (existingWidget && existingWidget.isConnected) {
+            updateLicenseButton(existingWidget, container);
+          } else {
+            const win = targetDoc.defaultView || window;
+            const compPos = win.getComputedStyle(container).position;
+            if (compPos === 'static') {
+              container.style.position = 'relative';
+            }
+            container.style.overflow = 'visible';
+
+            const parentBox = container.closest('.box, .box-white, .box-bordered') as HTMLElement | null;
+            if (parentBox) {
+              parentBox.style.overflow = 'visible';
+            }
+
+            ensureWidgetStyles(targetDoc);
+            const newWidget = createWidgetElement(targetDoc, container);
+            container.appendChild(newWidget);
+            updateLicenseButton(newWidget, container);
+          }
+        }
+      } else {
+        // Fallback: se nenhuma barra de abas foi detectada, tenta ancorar no .note-editor
+        const targetEditor = findVisibleNoteEditable(document);
+        if (targetEditor) {
+          const mountAnchor =
+            (targetEditor.closest('.note-editor') as HTMLElement | null) || targetEditor.parentElement;
+          if (mountAnchor && mountAnchor.isConnected) {
+            const targetDoc = mountAnchor.ownerDocument || document;
+            const existingWidget = mountAnchor.querySelector<HTMLElement>('.octablaster-floating-widget');
+
+            if (existingWidget && existingWidget.isConnected) {
+              updateLicenseButton(existingWidget, mountAnchor);
+            } else {
+              mountAnchor.style.position = 'relative';
+              mountAnchor.style.overflow = 'visible';
+              ensureWidgetStyles(targetDoc);
+              const newWidget = createWidgetElement(targetDoc, mountAnchor);
+              mountAnchor.appendChild(newWidget);
+              updateLicenseButton(newWidget, mountAnchor);
+            }
+          }
+        }
+      }
+    }
+
+    function initWidgetLifecycle() {
+      updateWidgetLifecycle();
+      window.setInterval(updateWidgetLifecycle, 800);
+
+      window.addEventListener('popstate', () => setTimeout(updateWidgetLifecycle, 400));
+      window.addEventListener('hashchange', () => setTimeout(updateWidgetLifecycle, 400));
+      window.addEventListener('click', () => setTimeout(updateWidgetLifecycle, 350));
+    }
+
+    function startWhenReady() {
+      console.log('[OctaBlaster v0.3.3] Aguardando estabilização do carregamento da página...');
+      const start = () => {
+        setTimeout(initWidgetLifecycle, 1200);
+      };
+
+      if (document.readyState === 'complete') {
+        start();
+      } else {
+        window.addEventListener('load', start, { once: true });
+        setTimeout(start, 2500);
+      }
+    }
+
     startWhenReady();
   },
 });

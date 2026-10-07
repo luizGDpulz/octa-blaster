@@ -1,6 +1,6 @@
 # 🐙 OctaBlaster - Respostas Rápidas & Automação para Octadesk
 
-> **Versão**: `0.3.2`
+> **Versão**: `0.3.3`
 
 Extensão moderna para navegadores web construída com **WXT (Next-gen Web Extension Framework)**, **TypeScript** e **Vue 3**, com suporte nativo e ultra-otimizado para o **Firefox** (incluindo Painel Lateral / Sidebar) e Chromium (Chrome, Edge, Brave, Opera).
 
@@ -22,21 +22,22 @@ Projetada especificamente para equipes de atendimento e suporte que utilizam o *
 
 ## ✨ Recursos Principais
 
-### 1. 🏷️ Automação Inteligente de Licenças (Contratação, Troca e Cancelamento)
-- **Detecção Automática**: Identifica quando o chamado aberto no Octadesk é sobre licenças (ex: `Contratação LICENÇA FACIAL (169614)`).
-- **Mudança Automática de Aba**: Alterna para **Anotação Interna** sem necessidade de cliques manuais.
+### 1. 🏷️ Automação Inteligente de Licenças com Isolamento por Ticket
+- **Detecção Isolada por Ticket**: Valida se o chamado atual é de licenças (**Contratação**, **Troca** ou **Cancelamento**) estritamente dentro do contêiner do próprio ticket, sem interferir nem vazar para outros tickets abertos simultaneamente.
+- **Mudança Automática de Aba**: Alterna para **Anotação Interna** no ticket correspondente sem necessidade de cliques manuais.
 - **Marcação dos Responsáveis**:
   1. Digita `@Jorge` e seleciona automaticamente **Jorge Tigre** no popover de menções do Octadesk (`.note-children-container .person-item`).
   2. Digita `@roberto` e seleciona automaticamente **Roberto Renck**.
-- **Acionamento em 1 clique**: Pode ser acionado diretamente pela **Barra Acoplada ao Editor**, pelo **Popup** ou pelo **Painel Lateral**.
+- **Acionamento em 1 clique**: Pode ser acionado diretamente pelo botão flutuante da barra de abas, pelo **Popup** ou pelo **Painel Lateral**.
 
-### 2. 🎯 Widget Acoplado ao Campo de Edição do Ticket (`.note-editable`)
-- **Exibição Restrita**: Ativo exclusivamente nas URLs do Octadesk e na seção de tickets (quando o campo de edição do ticket está aberto).
-- **Posicionamento Preciso**: Localizado no canto superior direito, exatamente acima do campo de edição de texto (`<div class="note-editable">`).
-- **Não invade o texto**: Posicionado antes do editor em fluxo limpo, sem sobrepor as mensagens digitadas.
-- **Botão Pulsante de Licença**: Se for detectado um ticket de licença, exibe o botão em amarelo `#ffc600`: `🏷️ Marcar (Contratação)`.
-- **Botão `📋 Respostas`**: Dropdown rápido com os modelos salvos para inserção imediata com 1 clique.
-- **Botão `✕`**: Minimiza a barra em um botão compacto com o logotipo oficial do Octadesk.
+### 2. 🎯 Widget Flutuante Expansível na Barra de Resposta (Suporte a Múltiplos Tickets)
+- **Múltiplos Tickets Concorrentes**: Cada ticket aberto no Octadesk recebe sua própria instância do widget ancorada perfeitamente na barra de abas de resposta (`div.space-x-md`), persistindo e sincronizando quando você troca de abas.
+- **Inicia Fechado por Padrão**: O widget inicia discretamente recolhido exibindo apenas o ícone do polvo `[ 🐙 ]`. Se o ticket for de licença, exibe um discreto ponto pulsante amarelo indicativo.
+- **Expansão Horizontal**: Ao clicar no ícone, expande suavemente exibindo:
+  - `🏷️ Marcar (Contratação)` (se for ticket de licença daquele chamado)
+  - `📋 Respostas` (dropdown de respostas rápidas)
+  - `✕` (recolher)
+- **Totalmente Seguro contra Formulários**: Todos os botões possuem prevenção de eventos (`type="button"`, `stopPropagation`, `preventDefault`) para nunca disparar envio indevido de formulário.
 
 ### 3. 🦊 Suporte ao Painel Lateral (Sidebar) do Firefox
 - Permite fixar o OctaBlaster na **barra lateral do Firefox** (sem fechar quando você clica na página).
