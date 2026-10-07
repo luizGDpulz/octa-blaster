@@ -207,21 +207,303 @@ export default defineContentScript({
     );
 
     // =========================================================================
-    // WIDGET FLUTUANTE EM PÁGINA (Somente na janela principal do Octadesk)
     // =========================================================================
-    if (window === window.top) {
-      setupFloatingBar();
+    // WIDGET ACOPLADO AO CAMPO DE TICKETS (Somente em *.octadesk.com e em tickets)
+    // =========================================================================
+    initWidgetLifecycle();
+
+    function getTopHrefSafe(): string {
+      try {
+        return window.top?.location.href || window.location.href;
+      } catch {
+        return window.location.href;
+      }
     }
 
-    function setupFloatingBar() {
-      const WIDGET_ID = 'octablaster-inpage-widget';
-      if (document.getElementById(WIDGET_ID)) return;
+    function isOctadeskTicketsContext(): boolean {
+      const host = window.location.hostname.toLowerCase();
+      const href = getTopHrefSafe().toLowerCase();
 
+      const isOcta = host.includes('octadesk.com') || href.includes('octadesk.com') || host.includes('localhost');
+      if (!isOcta) return false;
+
+      // Verifica se está na parte de tickets
+      const isTicketsUrl = href.includes('/ticket') || href.includes('#/ticket') || href.includes('tickets');
+      return isTicketsUrl;
+    }
+
+    function findVisibleNoteEditable(doc: Document = document): HTMLElement | null {
+      const editables = doc.querySelectorAll<HTMLElement>('.note-editable');
+      for (const el of Array.from(editables)) {
+        const rect = el.getBoundingClientRect();
+        const win = el.ownerDocument.defaultView || window;
+        const style = win.getComputedStyle(el);
+        if (rect.width > 20 && rect.height > 20 && style.display !== 'none' && style.visibility !== 'hidden') {
+          return el;
+        }
+      }
+      return null;
+    }
+
+    let activeWidget: HTMLElement | null = null;
+    let isMinimized = false;
+
+    function initWidgetLifecycle() {
+      let isChecking = false;
+      const runCheck = () => {
+        if (isChecking) return;
+        isChecking = true;
+        try {
+          updateWidgetLifecycle();
+        } finally {
+          isChecking = false;
+        }
+      };
+
+      runCheck();
+      setInterval(runCheck, 1000);
+
+      window.addEventListener('popstate', runCheck);
+      window.addEventListener('hashchange', runCheck);
+
+      const observer = new MutationObserver(() => {
+        runCheck();
+      });
+
+      if (document.body) {
+        observer.observe(document.body, { childList: true, subtree: true });
+      } else {
+        document.addEventListener('DOMContentLoaded', () => {
+          if (document.body) {
+            observer.observe(document.body, { childList: true, subtree: true });
+          }
+        });
+      }
+    }
+
+    function updateWidgetLifecycle() {
+      const isTickets = isOctadeskTicketsContext();
+      const target = findVisibleNoteEditable();
+
+      // Só deve aparecer na url indicada, na parte de tickets E quando o campo .note-editable existir
+      if (!isTickets && !target) {
+        if (activeWidget) {
+          activeWidget.remove();
+          activeWidget = null;
+        }
+        return;
+      }
+
+      if (!target) {
+        if (activeWidget) {
+          activeWidget.remove();
+          activeWidget = null;
+        }
+        return;
+      }
+
+      ensureWidgetStyles();
+
+      // Se já está montado imediatamente antes do campo de edição, só atualiza status
+      if (activeWidget && target.previousElementSibling === activeWidget) {
+        activeWidget.style.display = 'flex';
+        updateLicenseButton(activeWidget, target);
+        return;
+      }
+
+      // Se ainda não foi criado ou o campo mudou de lugar
+      if (!activeWidget) {
+        activeWidget = createWidgetElement();
+      }
+
+      target.parentNode?.insertBefore(activeWidget, target);
+      activeWidget.style.display = 'flex';
+
+      // Previne que containers pais com overflow cortem o dropdown
+      if (target.parentElement) {
+        target.parentElement.style.overflow = 'visible';
+      }
+
+      updateLicenseButton(activeWidget, target);
+    }
+
+    function ensureWidgetStyles() {
+      const STYLE_ID = 'octablaster-inpage-styles';
+      if (document.getElementById(STYLE_ID)) return;
+
+      const style = document.createElement('style');
+      style.id = STYLE_ID;
+      style.textContent = `
+        #octablaster-inpage-widget {
+          display: flex;
+          justify-content: flex-end;
+          align-items: center;
+          width: 100%;
+          padding: 2px 0 6px 0;
+          box-sizing: border-box;
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+          font-size: 13px;
+          position: relative;
+          z-index: 1050;
+          user-select: none;
+        }
+        .octa-bar-container {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+          background: #1c1b1c;
+          color: #ffffff;
+          border-radius: 20px;
+          padding: 3px 6px;
+          box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25);
+          border: 1px solid #3c3f43;
+          user-select: none;
+        }
+        .octa-pill-btn {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          background: transparent;
+          border: none;
+          color: #ffffff;
+          font-weight: 700;
+          cursor: pointer;
+          padding: 3px 8px;
+          font-size: 12px;
+          border-radius: 14px;
+          transition: background 0.15s;
+        }
+        .octa-pill-btn:hover {
+          background: rgba(255, 255, 255, 0.08);
+        }
+        .octa-logo-svg {
+          flex-shrink: 0;
+          display: block;
+        }
+        .octa-bar-actions {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          margin-left: 4px;
+        }
+        .octa-action-btn {
+          background: #3c3f43;
+          color: #ffffff;
+          border: 1px solid #5b5f63;
+          border-radius: 14px;
+          padding: 4px 10px;
+          font-size: 12px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+          white-space: nowrap;
+        }
+        .octa-action-btn:hover {
+          background: #5b5f63;
+        }
+        .octa-license-btn {
+          background: #ffc600 !important;
+          border: 1px solid #e5b100 !important;
+          color: #1c1b1c !important;
+          font-weight: 700 !important;
+          animation: octa-pulse 2s infinite;
+        }
+        .octa-license-btn:hover {
+          background: #f0ba00 !important;
+          box-shadow: 0 2px 8px rgba(255, 198, 0, 0.45) !important;
+        }
+        @keyframes octa-pulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(255, 198, 0, 0.6); }
+          50% { box-shadow: 0 0 0 6px rgba(255, 198, 0, 0); }
+        }
+        .octa-min-btn {
+          background: transparent;
+          border: none;
+          color: #dee0e4;
+          font-size: 11px;
+          cursor: pointer;
+          padding: 2px 6px;
+          border-radius: 50%;
+          transition: all 0.15s;
+        }
+        .octa-min-btn:hover {
+          color: #ffffff;
+          background: #3c3f43;
+        }
+        .octa-dropdown {
+          position: absolute;
+          top: 36px;
+          right: 0;
+          width: 310px;
+          background: #ffffff;
+          color: #1c1b1c;
+          border-radius: 8px;
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+          border: 1px solid #dee0e4;
+          overflow: hidden;
+          z-index: 2147483647;
+        }
+        .octa-dropdown-header {
+          padding: 8px 12px;
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          background: #1c1b1c;
+          border-bottom: 1px solid #3c3f43;
+          color: #ffc600;
+        }
+        .octa-dropdown-list {
+          max-height: 250px;
+          overflow-y: auto;
+          display: flex;
+          flex-direction: column;
+        }
+        .octa-dropdown-item {
+          padding: 8px 12px;
+          cursor: pointer;
+          border-bottom: 1px solid #f7f8f9;
+          text-align: left;
+          background: transparent;
+          border-left: none;
+          border-right: none;
+          border-top: none;
+          width: 100%;
+          font-size: 12px;
+          transition: background 0.15s;
+        }
+        .octa-dropdown-item:hover {
+          background: rgba(255, 198, 0, 0.12);
+        }
+        .octa-item-title {
+          font-weight: 600;
+          color: #1c1b1c;
+          display: block;
+        }
+        .octa-item-preview {
+          font-size: 11px;
+          color: #5b5f63;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          margin-top: 2px;
+        }
+        .octa-dropdown-empty {
+          padding: 16px;
+          text-align: center;
+          font-size: 12px;
+          color: #5b5f63;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    function createWidgetElement(): HTMLElement {
       const widget = document.createElement('div');
-      widget.id = WIDGET_ID;
+      widget.id = 'octablaster-inpage-widget';
       widget.innerHTML = `
         <div class="octa-bar-container">
-          <button id="octa-btn-toggle" class="octa-pill-btn" title="OctaBlaster - Respostas Rápidas">
+          <button id="octa-btn-toggle" class="octa-pill-btn" title="OctaBlaster">
             <svg class="octa-logo-svg" viewBox="0 0 498.69 498.69" width="16" height="16" fill="#ffc600" aria-hidden="true">
               <path d="M6.14,102C11.14,49.59,49.47,10.93,101.89,6,137.18,2.69,185.36,0,249.34,0s114.33,2.76,149.83,6.18c51.07,4.92,88.41,42.26,93.34,93.34,3.42,35.5,6.18,84.39,6.18,149.83s-2.76,114.32-6.18,149.82c-4.93,51.08-42.27,88.42-93.34,93.34-35.5,3.42-84.4,6.18-149.83,6.18s-112.16-2.63-147.45-6c-52.42-4.93-90.73-43.59-95.75-96C2.74,361.07,0,312.69,0,249.3S2.72,137.57,6.14,102m392.8,209.12c-3.01-11.83-15.03-18.98-26.86-16-6.28,1.42-12.77,1.74-19.16,.93-15.58-1.65-36-16.44-39.76-37.9-1.09-12.34,4.58-21.56,11.24-31.43,9-13.28,17.33-29.82,17.33-51.11,0-47.74-43.63-90.33-92.34-90.33s-93.78,39.72-93.78,90.28c0,21.29,9.82,37.83,18.82,51.11,6.66,9.88,12.33,19.08,11.24,31.43-1.08,17.13-24.21,36.25-39.76,37.9-6.39,.81-12.88,.49-19.16-.93-11.84-3.01-23.88,4.15-26.89,15.99h0c-1.43,5.69-.54,11.71,2.47,16.73,3.02,5.03,7.92,8.66,13.61,10.08,7.41,1.82,15.02,2.72,22.65,2.68,4.01,0,8.02-.22,12-.65,9.92-.9,19.58-3.65,28.48-8.11,5.4-1.37,10.41-3.95,14.65-7.55,2.42-1.88,4-3.09,5.28-2.21,3,2,2.76,4.6,1.58,7.5-.26,.58-.53,1.16-.81,1.73-.92,1.67-1.92,3.29-3,4.85-.63,.94-1.23,1.84-1.73,2.65-2.89,4.73-.49,1.07,4-5.91-1.8,3.46-3.85,6.79-6.14,9.95-9,12.35-16.76,21.68-23.8,28.54-6.41,6.23-8.42,15.71-5.08,24,4.62,11.35,17.56,16.81,28.92,12.19,2.64-1.07,5.04-2.64,7.08-4.62,8.85-8.63,18.26-19.8,28.7-34.2,8.75-12.12,15.27-25.7,19.26-40.11,.64-.84,1.51-1.47,2.51-1.8,3.95,15.06,10.65,29.27,19.75,41.91,10.48,14.4,19.86,25.57,28.71,34.2,8.71,8.55,22.71,8.41,31.26-.3s8.41-22.71-.31-31.25c-7-6.86-14.82-16.19-23.8-28.54-4.56-6.33-8.18-13.29-10.74-20.66,.44-.77,1.06-1.43,1.81-1.91,1.33-.86,2.87,.35,5.27,2.22,3.96,3.36,8.58,5.84,13.57,7.29,8.7,5.2,19.1,8.8,32.23,10.19,3.99,.43,7.99,.65,12,.65,7.63,.04,15.24-.86,22.65-2.68,8.69-2.16,15.22-9.36,16.52-18.22,.42-2.88,.26-5.81-.47-8.62v.05Zm-141.94-122c0,14.66,7.93,18.34,17.72,18.34s17.69-3.69,17.69-18.34-8-21.44-17.82-21.44-17.59,6.74-17.59,21.4v.04Zm-52.67,0c0,14.53,7.85,18.11,17.54,18.11s17.53-3.59,17.53-18.11-7.92-21.2-17.66-21.2-17.41,6.64-17.41,21.16v.04Z" />
             </svg>
@@ -252,159 +534,6 @@ export default defineContentScript({
         </div>
       `;
 
-      // Injeta estilos isolados do widget
-      const style = document.createElement('style');
-      style.textContent = `
-        #octablaster-inpage-widget {
-          position: fixed;
-          top: 14px;
-          right: 20px;
-          z-index: 2147483640;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-          font-size: 13px;
-        }
-        .octa-bar-container {
-          position: relative;
-          display: flex;
-          align-items: center;
-          background: #1e293b;
-          color: #ffffff;
-          border-radius: 24px;
-          padding: 4px 6px;
-          box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
-          border: 1px solid #334155;
-          user-select: none;
-        }
-        .octa-pill-btn {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          background: transparent;
-          border: none;
-          color: #ffffff;
-          font-weight: 600;
-          cursor: pointer;
-          padding: 4px 8px;
-          font-size: 13px;
-        }
-        .octa-logo-svg {
-          flex-shrink: 0;
-          display: block;
-        }
-        .octa-bar-actions {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          margin-left: 4px;
-        }
-        .octa-action-btn {
-          background: #334155;
-          color: #f8fafc;
-          border: 1px solid #475569;
-          border-radius: 16px;
-          padding: 5px 10px;
-          font-size: 12px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: background 0.15s;
-          white-space: nowrap;
-        }
-        .octa-action-btn:hover {
-          background: #475569;
-        }
-        .octa-license-btn {
-          background: #0284c7 !important;
-          border-color: #38bdf8 !important;
-          color: #ffffff !important;
-          animation: octa-pulse 2s infinite;
-        }
-        .octa-license-btn:hover {
-          background: #0369a1 !important;
-        }
-        @keyframes octa-pulse {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(14, 165, 233, 0.5); }
-          50% { box-shadow: 0 0 0 6px rgba(14, 165, 233, 0); }
-        }
-        .octa-min-btn {
-          background: transparent;
-          border: none;
-          color: #94a3b8;
-          font-size: 12px;
-          cursor: pointer;
-          padding: 2px 6px;
-          border-radius: 50%;
-        }
-        .octa-min-btn:hover {
-          color: #ffffff;
-          background: #334155;
-        }
-        .octa-dropdown {
-          position: absolute;
-          top: 42px;
-          right: 0;
-          width: 290px;
-          background: #ffffff;
-          color: #0f172a;
-          border-radius: 10px;
-          box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
-          border: 1px solid #e2e8f0;
-          overflow: hidden;
-          z-index: 2147483641;
-        }
-        .octa-dropdown-header {
-          padding: 8px 12px;
-          font-size: 11px;
-          font-weight: 700;
-          text-transform: uppercase;
-          background: #f8fafc;
-          border-bottom: 1px solid #e2e8f0;
-          color: #64748b;
-        }
-        .octa-dropdown-list {
-          max-height: 250px;
-          overflow-y: auto;
-          display: flex;
-          flex-direction: column;
-        }
-        .octa-dropdown-item {
-          padding: 8px 12px;
-          cursor: pointer;
-          border-bottom: 1px solid #f1f5f9;
-          text-align: left;
-          background: transparent;
-          border-left: none;
-          border-right: none;
-          border-top: none;
-          width: 100%;
-          font-size: 12px;
-        }
-        .octa-dropdown-item:hover {
-          background: #eff6ff;
-        }
-        .octa-item-title {
-          font-weight: 600;
-          color: #1e293b;
-          display: block;
-        }
-        .octa-item-preview {
-          font-size: 11px;
-          color: #64748b;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          margin-top: 2px;
-        }
-        .octa-dropdown-empty {
-          padding: 16px;
-          text-align: center;
-          font-size: 12px;
-          color: #94a3b8;
-        }
-      `;
-
-      document.head.appendChild(style);
-      document.body.appendChild(widget);
-
       const btnToggle = widget.querySelector('#octa-btn-toggle') as HTMLElement;
       const barActions = widget.querySelector('#octa-bar-actions') as HTMLElement;
       const btnLicense = widget.querySelector('#octa-btn-license') as HTMLElement;
@@ -412,8 +541,6 @@ export default defineContentScript({
       const btnMinimize = widget.querySelector('#octa-btn-minimize') as HTMLElement;
       const dropdownMenu = widget.querySelector('#octa-dropdown-menu') as HTMLElement;
       const dropdownList = widget.querySelector('#octa-dropdown-list') as HTMLElement;
-
-      let isMinimized = false;
 
       // Minimizar / Expandir
       btnMinimize.addEventListener('click', (e) => {
@@ -437,13 +564,10 @@ export default defineContentScript({
         btnLicense.textContent = '⏳ Marcando...';
         btnLicense.style.opacity = '0.7';
 
-        const target = findBestEditableElement();
+        const target = findVisibleNoteEditable() || findBestEditableElement();
         if (!target) {
-          btnLicense.textContent = '❌ Abra o ticket!';
-          setTimeout(() => {
-            btnLicense.textContent = '🏷️ Marcar Licenças';
-            btnLicense.style.opacity = '1';
-          }, 2000);
+          btnLicense.textContent = '❌ Campo não encontrado!';
+          setTimeout(() => updateLicenseButton(widget, target), 2000);
           return;
         }
 
@@ -454,10 +578,7 @@ export default defineContentScript({
           btnLicense.textContent = '❌ Tente novamente';
         }
 
-        setTimeout(() => {
-          btnLicense.textContent = '🏷️ Marcar Licenças';
-          btnLicense.style.opacity = '1';
-        }, 2500);
+        setTimeout(() => updateLicenseButton(widget, target), 2500);
       });
 
       // Dropdown de respostas rápidas
@@ -491,7 +612,7 @@ export default defineContentScript({
             `;
 
             itemBtn.addEventListener('click', () => {
-              const target = findBestEditableElement();
+              const target = findVisibleNoteEditable() || findBestEditableElement();
               if (target) {
                 // Resolve variável {{Saudacao}}
                 const hour = new Date().getHours();
@@ -504,7 +625,7 @@ export default defineContentScript({
                 insertTextIntoElement(target, processed);
                 dropdownMenu.style.display = 'none';
               } else {
-                alert('Clique primeiro no campo de texto do ticket antes de inserir.');
+                alert('Campo de texto do ticket não encontrado.');
               }
             });
 
@@ -520,17 +641,21 @@ export default defineContentScript({
         dropdownMenu.style.display = 'none';
       });
 
-      // Verificação contínua de ticket de licença (a cada 2 segundos)
-      setInterval(() => {
-        const info = detectLicenseTicket(document);
-        if (info && info.isLicenseTicket) {
-          btnLicense.style.display = 'inline-flex';
-          const typeLabel = info.type !== 'Outro' ? info.type : 'Licença';
-          btnLicense.textContent = `🏷️ Marcar (${typeLabel})`;
-        } else {
-          btnLicense.style.display = 'none';
-        }
-      }, 2000);
+      return widget;
+    }
+
+    function updateLicenseButton(widget: HTMLElement, target: HTMLElement | null) {
+      const btnLicense = widget.querySelector('#octa-btn-license') as HTMLElement | null;
+      if (!btnLicense) return;
+
+      const info = detectLicenseTicket(document);
+      if (info && info.isLicenseTicket) {
+        btnLicense.style.display = 'inline-flex';
+        const typeLabel = info.type !== 'Outro' ? info.type : 'Licença';
+        btnLicense.textContent = `🏷️ Marcar (${typeLabel})`;
+      } else {
+        btnLicense.style.display = 'none';
+      }
     }
   },
 });

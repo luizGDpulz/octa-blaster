@@ -1,6 +1,6 @@
-# ⚡ OctaBlaster - Respostas Rápidas & Automação para Octadesk
+# 🐙 OctaBlaster - Respostas Rápidas & Automação para Octadesk
 
-> **Versão**: `0.2.1`
+> **Versão**: `0.2.2`
 
 Extensão moderna para navegadores web construída com **WXT (Next-gen Web Extension Framework)**, **TypeScript** e **Vue 3**, com suporte nativo e ultra-otimizado para o **Firefox** (incluindo Painel Lateral / Sidebar) e Chromium (Chrome, Edge, Brave, Opera).
 
@@ -13,6 +13,7 @@ Projetada especificamente para equipes de atendimento e suporte que utilizam o *
 - **Framework**: [WXT](https://wxt.dev/) (Vite-powered Web Extension Framework)
 - **UI**: [Vue 3](https://vuejs.org/) (Composition API, `<script setup>`)
 - **Linguagem**: [TypeScript](https://www.typescriptlang.org/)
+- **Design System**: Paleta inspirada no **Secullum VMS** (Cinza Corporativo `#1c1b1c` / `#3c3f43` e Amarelo Destaque `#ffc600`)
 - **Gerenciador de Pacotes**: **pnpm**
 - **Armazenamento**: `browser.storage.local` (assíncrono e persistente)
 - **Painel Lateral Firefox**: Suporte nativo a `sidebar_action`
@@ -27,13 +28,15 @@ Projetada especificamente para equipes de atendimento e suporte que utilizam o *
 - **Marcação dos Responsáveis**:
   1. Digita `@Jorge` e seleciona automaticamente **Jorge Tigre** no popover de menções do Octadesk (`.note-children-container .person-item`).
   2. Digita `@roberto` e seleciona automaticamente **Roberto Renck**.
-- **Acionamento em 1 clique**: Pode ser acionado diretamente pela **Barra Flutuante na tela**, pelo **Popup** ou pelo **Painel Lateral**.
+- **Acionamento em 1 clique**: Pode ser acionado diretamente pela **Barra Acoplada ao Editor**, pelo **Popup** ou pelo **Painel Lateral**.
 
-### 2. ⚡ Widget Flutuante em Página (`OctaBlaster Bar`)
-- Exibido discretamente no topo direito da tela do Octadesk.
-- Se for detectado um ticket de licença, exibe o botão pulsante: `🏷️ Marcar (Contratação)`.
-- Botão `📋 Respostas`: Dropdown rápido para selecionar respostas prontas sem nem precisar abrir o popup da extensão.
-- Botão `✕`: Minimiza o widget em um ícone compacto retrátil (`⚡`).
+### 2. 🎯 Widget Acoplado ao Campo de Edição do Ticket (`.note-editable`)
+- **Exibição Restrita**: Ativo exclusivamente nas URLs do Octadesk e na seção de tickets (quando o campo de edição do ticket está aberto).
+- **Posicionamento Preciso**: Localizado no canto superior direito, exatamente acima do campo de edição de texto (`<div class="note-editable">`).
+- **Não invade o texto**: Posicionado antes do editor em fluxo limpo, sem sobrepor as mensagens digitadas.
+- **Botão Pulsante de Licença**: Se for detectado um ticket de licença, exibe o botão em amarelo `#ffc600`: `🏷️ Marcar (Contratação)`.
+- **Botão `📋 Respostas`**: Dropdown rápido com os modelos salvos para inserção imediata com 1 clique.
+- **Botão `✕`**: Minimiza a barra em um botão compacto com o logotipo oficial do Octadesk.
 
 ### 3. 🦊 Suporte ao Painel Lateral (Sidebar) do Firefox
 - Permite fixar o OctaBlaster na **barra lateral do Firefox** (sem fechar quando você clica na página).
