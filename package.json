@@ -2,7 +2,7 @@
   "name": "octa-blaster",
   "description": "Extensão para envio de respostas rápidas em tickets de helpdesk",
   "private": true,
-  "version": "0.1.0-beta.2",
+  "version": "0.2.0-beta.1",
   "type": "module",
   "scripts": {
     "dev": "wxt",

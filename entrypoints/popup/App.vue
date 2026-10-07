@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import type { QuickReplyTemplate, InsertMessageResponse } from '@/types/template';
+import type { LicenseTicketInfo } from '@/utils/licenseDetector';
 
 const STORAGE_KEY = 'octablaster_quick_replies_v2';
 const HAS_INITIALIZED_KEY = 'octablaster_initialized_v2';
+
+const detectedLicense = ref<LicenseTicketInfo | null>(null);
+const isAutomatingLicense = ref(false);
 
 const DEFAULT_TEMPLATES: QuickReplyTemplate[] = [
   {
@@ -253,8 +257,50 @@ const filteredTemplates = computed(() => {
   );
 });
 
+async function checkLicenseStatus() {
+  try {
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id) {
+      const res = (await browser.tabs.sendMessage(tab.id, {
+        action: 'CHECK_LICENSE_TICKET',
+      })) as InsertMessageResponse | undefined;
+      if (res?.success && res.data && res.data.isLicenseTicket) {
+        detectedLicense.value = res.data;
+      }
+    }
+  } catch {}
+}
+
+async function triggerLicenseMentions() {
+  if (isAutomatingLicense.value) return;
+  isAutomatingLicense.value = true;
+  try {
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) {
+      setStatus('Aba do navegador não encontrada.', 'error');
+      return;
+    }
+
+    const res = (await browser.tabs.sendMessage(tab.id, {
+      action: 'AUTOMATE_LICENSE_MENTIONS',
+    })) as InsertMessageResponse | undefined;
+
+    if (res?.success) {
+      setStatus('✅ Responsáveis de licenças marcados em Anotação Interna!', 'success');
+    } else {
+      setStatus(res?.error || 'Erro ao marcar responsáveis.', 'error');
+    }
+  } catch (error) {
+    console.error('Falha ao acionar automação de licenças:', error);
+    setStatus('Recarregue a página do ticket e tente novamente.', 'error');
+  } finally {
+    isAutomatingLicense.value = false;
+  }
+}
+
 onMounted(() => {
   loadTemplates();
+  checkLicenseStatus();
 });
 </script>
 
@@ -283,6 +329,23 @@ onMounted(() => {
         <span class="status-text">{{ statusMessage }}</span>
       </div>
     </transition>
+
+    <!-- Banner de Licença Detectada -->
+    <div v-if="detectedLicense" class="license-banner">
+      <div class="license-banner-content">
+        <span class="license-pill">⚡ Ticket de Licença Detectado</span>
+        <span class="license-sub">
+          {{ detectedLicense.type }} • {{ detectedLicense.databaseNumber ? `BD ${detectedLicense.databaseNumber}` : detectedLicense.licenseType }}
+        </span>
+      </div>
+      <button
+        class="btn-license-quick"
+        :disabled="isAutomatingLicense"
+        @click="triggerLicenseMentions"
+      >
+        {{ isAutomatingLicense ? '⏳ Marcando...' : '🏷️ Marcar Licenças' }}
+      </button>
+    </div>
 
     <!-- Formulário de Criação/Edição -->
     <div v-if="showForm" class="form-container">
@@ -435,7 +498,8 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   width: 100%;
-  height: 520px;
+  height: 100vh;
+  min-height: 480px;
   background: var(--bg-primary);
 }
 
@@ -517,6 +581,55 @@ onMounted(() => {
 
 .status-icon {
   font-weight: bold;
+}
+
+/* License Banner Styles */
+.license-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f0f9ff;
+  border-bottom: 1px solid #bae6fd;
+}
+
+.license-banner-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.license-pill {
+  font-size: 11px;
+  font-weight: 700;
+  color: #0369a1;
+}
+
+.license-sub {
+  font-size: 10px;
+  color: #0284c7;
+}
+
+.btn-license-quick {
+  background: #0284c7;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.btn-license-quick:hover:not(:disabled) {
+  background: #0369a1;
+}
+
+.btn-license-quick:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* Form Styles */

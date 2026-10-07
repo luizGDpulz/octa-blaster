@@ -1,10 +1,10 @@
-# ⚡ OctaBlaster - Extensão de Respostas Rápidas para Helpdesk
+# ⚡ OctaBlaster - Respostas Rápidas & Automação para Octadesk
 
-> **Versão**: `v0.1.0-beta.2` (Fase Beta)
+> **Versão**: `v0.2.0-beta.1` (Fase Beta)
 
-Extensão moderna para navegadores web construída com **WXT (Next-gen Web Extension Framework)**, **TypeScript** e **Vue 3**, com suporte nativo e ultra-otimizado para o **Firefox** (Manifest V2 e V3) e Chromium (Chrome, Edge, Brave, Opera).
+Extensão moderna para navegadores web construída com **WXT (Next-gen Web Extension Framework)**, **TypeScript** e **Vue 3**, com suporte nativo e ultra-otimizado para o **Firefox** (incluindo Painel Lateral / Sidebar) e Chromium (Chrome, Edge, Brave, Opera).
 
-Projetada para equipes de atendimento e suporte (Octadesk e outros helpdesks), permitindo cadastrar modelos de respostas prontas e inseri-las diretamente no editor de tickets com 1 clique.
+Projetada especificamente para equipes de atendimento e suporte que utilizam o **Octadesk**, integrando respostas prontas, injeção inteligente de texto e **automação de tickets de licenças**.
 
 ---
 
@@ -15,28 +15,40 @@ Projetada para equipes de atendimento e suporte (Octadesk e outros helpdesks), p
 - **Linguagem**: [TypeScript](https://www.typescriptlang.org/)
 - **Gerenciador de Pacotes**: **pnpm**
 - **Armazenamento**: `browser.storage.local` (assíncrono e persistente)
-- **Compatibilidade Firefox**: Tipagens completas `webextension-polyfill` unificadas
+- **Painel Lateral Firefox**: Suporte nativo a `sidebar_action`
 
 ---
 
-## ✨ Recursos
+## ✨ Recursos Principais
 
-1. **Injeção de Alta Compatibilidade**:
-   - Funciona em `<textarea>` e `<input>` convencionais.
-   - Suporte a editores ricos **ContentEditable / WYSIWYG** (TinyMCE, Quill, CKEditor, Lexical, Froala, ProseMirror).
-   - Despacha eventos nativos (`input`, `change`, `InputEvent`) para garantir que Single Page Applications (React, Vue, Angular) atualizem seus estados internos sem perder o texto ao salvar ou enviar.
-   - Suporte a editores embutidos em `iframe` via `allFrames: true`.
-2. **Variáveis Dinâmicas**:
-   - `{saudacao}`: detecta o horário do dia e preenche automaticamente com *Bom dia*, *Boa tarde* ou *Boa noite*.
-   - `{data}`: insere a data atual formatada (`DD/MM/AAAA`).
-   - `{hora}`: insere a hora atual (`HH:mm`).
-3. **Gerenciador Completo de Modelos**:
-   - Criar, editar, categorizar e excluir modelos.
-   - Modelos padrão pré-carregados na primeira utilização.
-   - Filtro de busca instantânea por título, categoria ou conteúdo.
-4. **Duplo Método de Uso**:
-   - Botão **🚀 Inserir no Ticket**: envia direto para o campo em foco na aba ativa.
-   - Botão **📋 Copiar**: copia com formatação para a área de transferência caso o usuário prefira colar manualmente.
+### 1. 🏷️ Automação Inteligente de Licenças (Contratação, Troca e Cancelamento)
+- **Detecção Automática**: Identifica quando o chamado aberto no Octadesk é sobre licenças (ex: `Contratação LICENÇA FACIAL (169614)`).
+- **Mudança Automática de Aba**: Alterna para **Anotação Interna** sem necessidade de cliques manuais.
+- **Marcação dos Responsáveis**:
+  1. Digita `@Jorge` e seleciona automaticamente **Jorge Tigre** no popover de menções do Octadesk (`.note-children-container .person-item`).
+  2. Digita `@roberto` e seleciona automaticamente **Roberto Renck**.
+- **Acionamento em 1 clique**: Pode ser acionado diretamente pela **Barra Flutuante na tela**, pelo **Popup** ou pelo **Painel Lateral**.
+
+### 2. ⚡ Widget Flutuante em Página (`OctaBlaster Bar`)
+- Exibido discretamente no topo direito da tela do Octadesk.
+- Se for detectado um ticket de licença, exibe o botão pulsante: `🏷️ Marcar (Contratação)`.
+- Botão `📋 Respostas`: Dropdown rápido para selecionar respostas prontas sem nem precisar abrir o popup da extensão.
+- Botão `✕`: Minimiza o widget em um ícone compacto retrátil (`⚡`).
+
+### 3. 🦊 Suporte ao Painel Lateral (Sidebar) do Firefox
+- Permite fixar o OctaBlaster na **barra lateral do Firefox** (sem fechar quando você clica na página).
+- Para abrir no Firefox:
+  - Pressione `Ctrl+B` (ou `Alt` -> menu *Exibir* -> *Painel Lateral* -> *OctaBlaster*), ou clique no ícone do painel lateral na barra de ferramentas.
+
+### 4. ☀️ Variável Inteligente `{{Saudacao}}`
+- Detecta o horário de trabalho do atendente e preenche automaticamente:
+  - **Manhã** (05:00 às 11:59): `Bom dia!`
+  - **Tarde** (12:00 às 17:59): `Boa tarde!`
+  - **Noite** (18:00 às 04:59): `Boa noite!`
+- Também suporta `{data}` e `{hora}`.
+
+### 5. 🛡️ Trava de Idempotência Anti-Duplicação
+- Previne colagens múltiplas acidentais causadas por múltiplos frames (`iframe.embedded__app_GUiYT`) ou cliques repetidos.
 
 ---
 
@@ -47,73 +59,37 @@ Projetada para equipes de atendimento e suporte (Octadesk e outros helpdesks), p
 pnpm install
 ```
 
-### 2. Rodar em desenvolvimento com o Firefox
-Abre uma instância isolada do Firefox com Hot Module Replacement (HMR) e recarregamento automático da extensão a cada salvamento:
+### 2. Rodar em desenvolvimento com o Firefox (Live Reload)
+Abre uma instância dedicada do Firefox com Hot Module Replacement (HMR):
 ```bash
 pnpm dev:firefox
 ```
-
-*(Ou para Chromium: `pnpm dev`)*
 
 ### 3. Verificar tipos TypeScript
 ```bash
 pnpm compile
 ```
 
-### 4. Gerar build de produção
-Para Firefox:
+### 4. Gerar build de produção para Firefox
 ```bash
 pnpm build:firefox
 ```
-A saída será gerada na pasta `.output/firefox-mv2` (ou `.output/firefox-mv3` se especificado).
-
-Para Chrome/Chromium:
-```bash
-pnpm build
-```
-
-### 5. Gerar arquivo ZIP para publicação / distribuição
-```bash
-pnpm zip:firefox
-```
+A saída pronta para carregar será gerada na pasta `.output/firefox-mv2`.
 
 ---
 
-## 🦊 Como Carregar no Firefox Manualmente
+## 🔄 Como Atualizar a Extensão no Firefox Pessoal
 
-1. Gere a compilação:
+Se você já carregou a extensão temporária anteriormente e gerou um novo build:
+
+1. No terminal, compile a nova versão:
    ```bash
    pnpm build:firefox
    ```
-2. Abra o Firefox e digite na barra de endereços:
+2. Abra a aba de depuração no Firefox:
    ```text
    about:debugging#/runtime/this-firefox
    ```
-3. Clique em **"Carregar extensão temporária..."** (Load Temporary Add-on).
-4. Navegue até o diretório do projeto e selecione o arquivo:
-   ```text
-   .output/firefox-mv2/manifest.json
-   ```
-5. O ícone do **OctaBlaster** aparecerá na barra de ferramentas do Firefox!
-
----
-
-## 📂 Estrutura de Arquivos
-
-```text
-├── entrypoints/
-│   ├── background.ts         # Service worker / background script da extensão
-│   ├── content.ts            # Content script que monitora foco e recebe mensagens
-│   └── popup/                # Interface da extensão (aberta ao clicar no ícone)
-│       ├── App.vue           # Componente principal do gerenciador
-│       ├── main.ts           # Inicialização do Vue 3
-│       ├── index.html        # HTML do popup
-│       └── style.css         # Reset e tema visual
-├── types/
-│   └── template.ts           # Interfaces TypeScript (QuickReplyTemplate, Requests)
-├── utils/
-│   └── insertText.ts         # Motor de injeção em textarea/input e contenteditable
-├── public/                   # Assets estáticos e ícones
-├── wxt.config.ts             # Configurações do framework WXT e Manifesto
-└── package.json              # Scripts e dependências (pnpm)
-```
+3. Na seção **"Extensões temporárias"**, localize o **OctaBlaster**.
+4. Clique no botão **"Recarregar"** (*Reload*).
+5. Pronto! O Firefox recarrega instantaneamente todos os novos scripts e manifestos sem precisar reconfigurar nada.
