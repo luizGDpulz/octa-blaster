@@ -8,15 +8,24 @@ export interface LicenseTicketInfo {
   rawTitle?: string;
 }
 
+function isDOMElement(val: unknown): val is HTMLElement {
+  return !!(val && typeof val === 'object' && 'nodeType' in val && (val as Node).nodeType === 1);
+}
+
 /**
  * Extrai texto do elemento excluindo os próprios widgets do OctaBlaster
  * para evitar qualquer falso positivo induzido pela própria extensão.
  */
-function extractCleanText(root: HTMLElement): string {
-  if (root.classList?.contains('octablaster-floating-widget')) return '';
+function extractCleanText(root: HTMLElement | null | undefined): string {
+  if (!root) return '';
+  if (root.classList && root.classList.contains('octablaster-floating-widget')) return '';
 
-  const widgets = root.querySelectorAll<HTMLElement>('.octablaster-floating-widget');
-  if (widgets.length === 0) {
+  const widgets =
+    typeof root.querySelectorAll === 'function'
+      ? root.querySelectorAll<HTMLElement>('.octablaster-floating-widget')
+      : null;
+
+  if (!widgets || widgets.length === 0) {
     return root.innerText || root.textContent || '';
   }
 
@@ -40,15 +49,17 @@ function extractCleanText(root: HTMLElement): string {
  * Garante que a busca fique restrita a este ticket, sem vazar dados de outros tickets.
  */
 export function getScopedTicketContainer(el: HTMLElement): HTMLElement {
-  // Procura contêiner de aba/painel se houver abas simultâneas no mesmo documento
-  const explicitContainer = el.closest<HTMLElement>(
-    '.tab-pane, [role="tabpanel"], .ticket-container, .ticket-view, .ticket-page, form, .main--container_X1D7w, [ticket-id]'
-  );
-  if (explicitContainer && explicitContainer !== el.ownerDocument.body) {
-    return explicitContainer;
+  if (!el) return document.body;
+  if (typeof el.closest === 'function') {
+    const explicitContainer = el.closest<HTMLElement>(
+      '.tab-pane, [role="tabpanel"], .ticket-container, .ticket-view, .ticket-page, form, .main--container_X1D7w, [ticket-id]'
+    );
+    if (explicitContainer && el.ownerDocument && explicitContainer !== el.ownerDocument.body) {
+      return explicitContainer;
+    }
   }
 
-  return el.ownerDocument.body || el;
+  return el.ownerDocument?.body || el;
 }
 
 /**
@@ -56,20 +67,27 @@ export function getScopedTicketContainer(el: HTMLElement): HTMLElement {
  * (Contratação, Troca, Cancelamento ou Renovação).
  * Se um HTMLElement for fornecido, a verificação é estritamente isolada àquele ticket!
  */
-export function detectLicenseTicket(scope: Document | HTMLElement = document): LicenseTicketInfo | null {
+export function detectLicenseTicket(scope: Document | HTMLElement | unknown = document): LicenseTicketInfo | null {
   try {
-    let targetDoc: Document;
-    let targetRoot: HTMLElement;
+    if (!scope) return null;
 
-    if (scope instanceof HTMLElement) {
+    let targetDoc: Document | null = null;
+    let targetRoot: HTMLElement | null = null;
+
+    if (isDOMElement(scope)) {
       targetDoc = scope.ownerDocument;
       targetRoot = getScopedTicketContainer(scope);
+    } else if (scope && typeof scope === 'object' && 'nodeType' in scope && (scope as Node).nodeType === 9) {
+      targetDoc = scope as Document;
+      targetRoot = (targetDoc.body || targetDoc.documentElement) as HTMLElement | null;
     } else {
-      targetDoc = scope;
-      targetRoot = scope.body || scope.documentElement;
+      targetDoc = document;
+      targetRoot = (document.body || document.documentElement) as HTMLElement | null;
     }
 
-    const docTitle = targetDoc.title || '';
+    if (!targetRoot) return null;
+
+    const docTitle = targetDoc?.title || '';
     const cleanText = extractCleanText(targetRoot);
     const fullText = `${docTitle}\n${cleanText}`;
 

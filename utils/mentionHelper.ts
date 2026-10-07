@@ -4,6 +4,10 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function isDOMElement(val: unknown): val is HTMLElement {
+  return !!(val && typeof val === 'object' && 'nodeType' in val && (val as Node).nodeType === 1);
+}
+
 function getAllDocuments(rootDoc: Document = document): Document[] {
   const allDocs: Document[] = [];
   function add(d: Document | null | undefined) {
@@ -34,7 +38,7 @@ function getAllDocuments(rootDoc: Document = document): Document[] {
  * Verifica se a aba "Anotação interna" já está ativa no Octadesk.
  */
 export function isInternalNoteTabActive(scope: Document | HTMLElement = document): boolean {
-  if (scope instanceof HTMLElement) {
+  if (isDOMElement(scope)) {
     const activeInternalLi = scope.querySelector<HTMLElement>(
       'li.active[ng-class*="commentTypeSelected === 3"], li.active.yellow[comment-type-selected="vm.commentTypeSelected"]',
     );
@@ -107,7 +111,7 @@ export async function switchToInternalNote(scope: Document | HTMLElement = docum
     return true;
   }
 
-  if (scope instanceof HTMLElement) {
+  if (isDOMElement(scope)) {
     const searchTarget: HTMLElement =
       scope.closest<HTMLElement>('.space-x-md, .ticket-view, .box, [ticket]') || scope;
 
@@ -199,7 +203,7 @@ export async function waitForInternalNoteEditor(
   const startTime = Date.now();
 
   while (Date.now() - startTime < maxWaitMs) {
-    if (scope instanceof HTMLElement) {
+    if (isDOMElement(scope)) {
       const targetContainer =
         scope.closest<HTMLElement>('.space-x-md, .ticket-view, .box, [ticket]') || scope.parentElement || scope;
       const editables = targetContainer.querySelectorAll<HTMLElement>('.note-editable');
@@ -243,7 +247,7 @@ export async function waitForInternalNoteEditor(
     await sleep(100);
   }
 
-  if (scope instanceof HTMLElement) {
+  if (isDOMElement(scope)) {
     return scope.querySelector<HTMLElement>('.note-editable') || scope.ownerDocument.querySelector<HTMLElement>('.note-editable');
   }
   return scope.querySelector<HTMLElement>('.note-editable');

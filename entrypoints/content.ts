@@ -9,7 +9,7 @@ export default defineContentScript({
   matchAboutBlank: true,
   runAt: 'document_idle',
   main() {
-    console.log('[OctaBlaster v0.3.5] Content script inicializado no frame:', window.location.href);
+    console.log('[OctaBlaster v0.3.6] Content script inicializado no frame:', window.location.href);
     let lastActiveInput: HTMLElement | null = null;
     const processedRequests = new Set<string>();
 
@@ -295,42 +295,38 @@ export default defineContentScript({
     }
 
     /**
-     * Localiza todas as barras de abas de tickets presentes nos documentos abertos
+     * Localiza todas as barras de abas de tickets presentes no documento atual
      */
     function findTicketTabContainers(rootDoc: Document = document): HTMLElement[] {
-      const allDocs = window === window.top ? getAllAccessibleDocuments(rootDoc) : [rootDoc];
       const results: HTMLElement[] = [];
-
-      for (const d of allDocs) {
-        try {
-          // 1. Prioridade: contêineres space-x-md de comentários de tickets
-          const spaceContainers = d.querySelectorAll<HTMLElement>(
-            'div.space-x-md[comment-type-selected], div.space-x-md[ticket], div.space-x-md',
-          );
-          for (const el of Array.from(spaceContainers)) {
-            if (
-              el.querySelector('.nav-comments, .subarea-tabs, [ng-click*="commentTypeSelected"]') ||
-              el.hasAttribute('comment-type-selected') ||
-              el.hasAttribute('ticket')
-            ) {
-              if (el.isConnected && !results.includes(el)) {
-                results.push(el);
-              }
+      try {
+        // 1. Prioridade: contêineres space-x-md de comentários de tickets no documento atual
+        const spaceContainers = rootDoc.querySelectorAll<HTMLElement>(
+          'div.space-x-md[comment-type-selected], div.space-x-md[ticket], div.space-x-md',
+        );
+        for (const el of Array.from(spaceContainers)) {
+          if (
+            el.querySelector('.nav-comments, .subarea-tabs, [ng-click*="commentTypeSelected"]') ||
+            el.hasAttribute('comment-type-selected') ||
+            el.hasAttribute('ticket')
+          ) {
+            if (el.isConnected && !results.includes(el)) {
+              results.push(el);
             }
           }
+        }
 
-          // 2. Se não encontrou space-x-md neste doc, busca por nav.subarea-tabs
-          if (results.length === 0) {
-            const subareaNavs = d.querySelectorAll<HTMLElement>('nav.subarea-tabs, .subarea-tabs');
-            for (const el of Array.from(subareaNavs)) {
-              const parent = el.parentElement && el.parentElement.tagName === 'DIV' ? el.parentElement : el;
-              if (parent.isConnected && !results.includes(parent)) {
-                results.push(parent);
-              }
+        // 2. Se não encontrou space-x-md neste doc, busca por nav.subarea-tabs
+        if (results.length === 0) {
+          const subareaNavs = rootDoc.querySelectorAll<HTMLElement>('nav.subarea-tabs, .subarea-tabs');
+          for (const el of Array.from(subareaNavs)) {
+            const parent = el.parentElement && el.parentElement.tagName === 'DIV' ? el.parentElement : el;
+            if (parent.isConnected && !results.includes(parent)) {
+              results.push(parent);
             }
           }
-        } catch {}
-      }
+        }
+      } catch {}
 
       return results;
     }
@@ -478,15 +474,11 @@ export default defineContentScript({
           border: 1px solid #e5b100 !important;
           color: #1c1b1c !important;
           font-weight: 700 !important;
-          animation: octa-pulse 2s infinite !important;
+          box-shadow: 0 2px 8px rgba(255, 198, 0, 0.25) !important;
         }
         .octa-license-btn:hover {
           background: #f0ba00 !important;
-          box-shadow: 0 2px 8px rgba(255, 198, 0, 0.45) !important;
-        }
-        @keyframes octa-pulse {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(255, 198, 0, 0.6); }
-          50% { box-shadow: 0 0 0 6px rgba(255, 198, 0, 0); }
+          box-shadow: 0 2px 12px rgba(255, 198, 0, 0.5) !important;
         }
         .octa-min-btn {
           background: transparent !important;
@@ -888,7 +880,7 @@ export default defineContentScript({
     }
 
     function startWhenReady() {
-      console.log('[OctaBlaster v0.3.5] Aguardando estabilização do carregamento da página...');
+      console.log('[OctaBlaster v0.3.6] Aguardando estabilização do carregamento da página...');
       const start = () => {
         setTimeout(initWidgetLifecycle, 1200);
       };
