@@ -4,10 +4,11 @@ import { automateLicenseMentions, switchToInternalNote } from '@/utils/mentionHe
 import type { InsertMessageRequest, InsertMessageResponse, QuickReplyTemplate } from '@/types/template';
 
 export default defineContentScript({
-  matches: ['https://app.octadesk.com/*'],
+  matches: ['*://app.octadesk.com/*', '*://*.octadesk.com/*'],
   allFrames: true,
   runAt: 'document_idle',
   main() {
+    console.log('[OctaBlaster v0.2.5] Content script inicializado no frame:', window.location.href);
     let lastActiveInput: HTMLElement | null = null;
     const processedRequests = new Set<string>();
 
@@ -224,24 +225,52 @@ export default defineContentScript({
       const host = window.location.hostname.toLowerCase();
       const href = getTopHrefSafe().toLowerCase();
 
-      // Limita estritamente ao host app.octadesk.com (ou localhost durante testes de dev)
-      const isTargetHost = host === 'app.octadesk.com' || href.includes('app.octadesk.com') || host === 'localhost';
-      if (!isTargetHost) return false;
+      // Aceita app.octadesk.com, *.octadesk.com ou localhost
+      const isOctaHost = host.includes('octadesk.com') || href.includes('octadesk.com') || host === 'localhost';
+      if (!isOctaHost) return false;
 
-      // Limita estritamente à rota de tickets: https://app.octadesk.com/ticket (ou #/ticket)
-      const isTicketRoute = href.includes('/ticket') || href.includes('#/ticket');
+      // Verifica se a rota é de tickets (/ticket, #/ticket, tickets) OU se já existe um editor de tickets no DOM
+      const isTicketRoute = href.includes('ticket') || !!findVisibleNoteEditable();
       return isTicketRoute;
     }
 
     function findVisibleNoteEditable(doc: Document = document): HTMLElement | null {
-      const editables = doc.querySelectorAll<HTMLElement>('.note-editable');
-      for (const el of Array.from(editables)) {
-        const rect = el.getBoundingClientRect();
-        const win = el.ownerDocument.defaultView || window;
-        const style = win.getComputedStyle(el);
-        if (rect.width > 20 && rect.height > 20 && style.display !== 'none' && style.visibility !== 'hidden') {
-          return el;
+      try {
+        const editables = doc.querySelectorAll<HTMLElement>('.note-editable');
+        for (const el of Array.from(editables)) {
+          const win = el.ownerDocument.defaultView || window;
+          const style = win.getComputedStyle(el);
+          const rect = el.getBoundingClientRect();
+
+          const isNotHidden =
+            style.display !== 'none' &&
+            style.visibility !== 'hidden' &&
+            style.opacity !== '0';
+
+          const hasDimensions =
+            rect.width > 10 ||
+            el.offsetWidth > 10 ||
+            el.offsetParent !== null ||
+            Boolean(el.style.height);
+
+          if (isNotHidden && hasDimensions) {
+            return el;
+          }
         }
+
+        // Procura também em iframes acessíveis do mesmo documento
+        const iframes = doc.querySelectorAll<HTMLIFrameElement>('iframe');
+        for (const ifr of Array.from(iframes)) {
+          try {
+            const childDoc = ifr.contentDocument || ifr.contentWindow?.document;
+            if (childDoc) {
+              const childEl = findVisibleNoteEditable(childDoc);
+              if (childEl) return childEl;
+            }
+          } catch {}
+        }
+      } catch (err) {
+        console.warn('[OctaBlaster] Erro ao buscar editor .note-editable:', err);
       }
       return null;
     }
@@ -286,7 +315,7 @@ export default defineContentScript({
       const isTickets = isOctadeskTicketsContext();
       const target = findVisibleNoteEditable();
 
-      // Só deve aparecer estritamente quando estiver na URL https://app.octadesk.com/ticket E com o campo .note-editable presente
+      // Só deve aparecer estritamente quando estiver no contexto do Octadesk com o editor de tickets presente
       if (!isTickets || !target) {
         if (activeWidget) {
           activeWidget.remove();
@@ -295,111 +324,135 @@ export default defineContentScript({
         return;
       }
 
-      ensureWidgetStyles();
+      const targetDoc = target.ownerDocument || document;
+      ensureWidgetStyles(targetDoc);
 
-      // Se já está montado imediatamente antes do campo de edição, só atualiza status
-      if (activeWidget && target.previousElementSibling === activeWidget) {
+      // Localiza o container do Summernote (.note-editor) ou o pai direto
+      const editorBox = target.closest('.note-editor') as HTMLElement | null;
+      const editingArea = (editorBox?.querySelector('.note-editing-area') as HTMLElement | null) || target;
+      const mountParent = editorBox || target.parentElement;
+
+      if (!mountParent) return;
+
+      // Se já está montado imediatamente antes da área de edição, apenas atualiza botões
+      if (
+        activeWidget &&
+        activeWidget.parentElement === mountParent &&
+        activeWidget.nextElementSibling === editingArea
+      ) {
         activeWidget.style.display = 'flex';
         updateLicenseButton(activeWidget, target);
         return;
       }
 
-      // Se ainda não foi criado ou o campo mudou de lugar
+      // Se ainda não foi criado
       if (!activeWidget) {
         activeWidget = createWidgetElement();
+        console.log('[OctaBlaster] Barra de ações acoplada criada com sucesso!');
       }
 
-      target.parentNode?.insertBefore(activeWidget, target);
+      // Insere antes da área de edição (no topo do card do editor)
+      mountParent.insertBefore(activeWidget, editingArea);
       activeWidget.style.display = 'flex';
 
       // Previne que containers pais com overflow cortem o dropdown
-      if (target.parentElement) {
-        target.parentElement.style.overflow = 'visible';
-      }
+      mountParent.style.overflow = 'visible';
+      if (editorBox) editorBox.style.overflow = 'visible';
+      if (target.parentElement) target.parentElement.style.overflow = 'visible';
 
       updateLicenseButton(activeWidget, target);
     }
 
-    function ensureWidgetStyles() {
+    function ensureWidgetStyles(doc: Document = document) {
       const STYLE_ID = 'octablaster-inpage-styles';
-      if (document.getElementById(STYLE_ID)) return;
+      if (doc.getElementById(STYLE_ID)) return;
 
-      const style = document.createElement('style');
+      const style = doc.createElement('style');
       style.id = STYLE_ID;
       style.textContent = `
         #octablaster-inpage-widget {
-          display: flex;
-          justify-content: flex-end;
-          align-items: center;
-          width: 100%;
-          padding: 2px 0 6px 0;
-          box-sizing: border-box;
-          font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-          font-size: 13px;
-          position: relative;
-          z-index: 1050;
-          user-select: none;
+          display: flex !important;
+          justify-content: flex-end !important;
+          align-items: center !important;
+          width: 100% !important;
+          padding: 4px 8px !important;
+          box-sizing: border-box !important;
+          background: #1c1b1c !important;
+          border-bottom: 1px solid #3c3f43 !important;
+          border-top-left-radius: 4px !important;
+          border-top-right-radius: 4px !important;
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
+          font-size: 13px !important;
+          position: relative !important;
+          z-index: 1050 !important;
+          user-select: none !important;
         }
         .octa-bar-container {
-          position: relative;
-          display: inline-flex;
-          align-items: center;
-          background: #1c1b1c;
-          color: #ffffff;
-          border-radius: 20px;
-          padding: 3px 6px;
-          box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25);
-          border: 1px solid #3c3f43;
-          user-select: none;
+          position: relative !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          background: #252425 !important;
+          color: #ffffff !important;
+          border-radius: 20px !important;
+          padding: 2px 6px !important;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3) !important;
+          border: 1px solid #3c3f43 !important;
+          user-select: none !important;
         }
         .octa-pill-btn {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          background: transparent;
-          border: none;
-          color: #ffffff;
-          font-weight: 700;
-          cursor: pointer;
-          padding: 3px 8px;
-          font-size: 12px;
-          border-radius: 14px;
-          transition: background 0.15s;
+          display: flex !important;
+          align-items: center !important;
+          gap: 6px !important;
+          background: transparent !important;
+          border: none !important;
+          color: #ffffff !important;
+          font-weight: 700 !important;
+          cursor: pointer !important;
+          padding: 3px 8px !important;
+          font-size: 12px !important;
+          border-radius: 14px !important;
+          transition: background 0.15s !important;
         }
         .octa-pill-btn:hover {
-          background: rgba(255, 255, 255, 0.08);
+          background: rgba(255, 255, 255, 0.08) !important;
+        }
+        .octa-bar-text {
+          color: #dee0e4 !important;
+          font-size: 11px !important;
+          font-weight: 700 !important;
+          letter-spacing: 0.3px !important;
         }
         .octa-logo-svg {
-          flex-shrink: 0;
-          display: block;
+          flex-shrink: 0 !important;
+          display: block !important;
         }
         .octa-bar-actions {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          margin-left: 4px;
+          display: flex !important;
+          align-items: center !important;
+          gap: 6px !important;
+          margin-left: 4px !important;
         }
         .octa-action-btn {
-          background: #3c3f43;
-          color: #ffffff;
-          border: 1px solid #5b5f63;
-          border-radius: 14px;
-          padding: 4px 10px;
-          font-size: 12px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
-          white-space: nowrap;
+          background: #3c3f43 !important;
+          color: #ffffff !important;
+          border: 1px solid #5b5f63 !important;
+          border-radius: 14px !important;
+          padding: 4px 10px !important;
+          font-size: 12px !important;
+          font-weight: 600 !important;
+          cursor: pointer !important;
+          transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1) !important;
+          white-space: nowrap !important;
         }
         .octa-action-btn:hover {
-          background: #5b5f63;
+          background: #5b5f63 !important;
         }
         .octa-license-btn {
           background: #ffc600 !important;
           border: 1px solid #e5b100 !important;
           color: #1c1b1c !important;
           font-weight: 700 !important;
-          animation: octa-pulse 2s infinite;
+          animation: octa-pulse 2s infinite !important;
         }
         .octa-license-btn:hover {
           background: #f0ba00 !important;
@@ -410,85 +463,85 @@ export default defineContentScript({
           50% { box-shadow: 0 0 0 6px rgba(255, 198, 0, 0); }
         }
         .octa-min-btn {
-          background: transparent;
-          border: none;
-          color: #dee0e4;
-          font-size: 11px;
-          cursor: pointer;
-          padding: 2px 6px;
-          border-radius: 50%;
-          transition: all 0.15s;
+          background: transparent !important;
+          border: none !important;
+          color: #dee0e4 !important;
+          font-size: 11px !important;
+          cursor: pointer !important;
+          padding: 2px 6px !important;
+          border-radius: 50% !important;
+          transition: all 0.15s !important;
         }
         .octa-min-btn:hover {
-          color: #ffffff;
-          background: #3c3f43;
+          color: #ffffff !important;
+          background: #3c3f43 !important;
         }
         .octa-dropdown {
-          position: absolute;
-          top: 36px;
-          right: 0;
-          width: 310px;
-          background: #ffffff;
-          color: #1c1b1c;
-          border-radius: 8px;
-          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-          border: 1px solid #dee0e4;
-          overflow: hidden;
-          z-index: 2147483647;
+          position: absolute !important;
+          top: 36px !important;
+          right: 0 !important;
+          width: 320px !important;
+          background: #ffffff !important;
+          color: #1c1b1c !important;
+          border-radius: 8px !important;
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35) !important;
+          border: 1px solid #dee0e4 !important;
+          overflow: hidden !important;
+          z-index: 2147483647 !important;
         }
         .octa-dropdown-header {
-          padding: 8px 12px;
-          font-size: 11px;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          background: #1c1b1c;
-          border-bottom: 1px solid #3c3f43;
-          color: #ffc600;
+          padding: 8px 12px !important;
+          font-size: 11px !important;
+          font-weight: 700 !important;
+          text-transform: uppercase !important;
+          letter-spacing: 0.5px !important;
+          background: #1c1b1c !important;
+          border-bottom: 1px solid #3c3f43 !important;
+          color: #ffc600 !important;
         }
         .octa-dropdown-list {
-          max-height: 250px;
-          overflow-y: auto;
-          display: flex;
-          flex-direction: column;
+          max-height: 250px !important;
+          overflow-y: auto !important;
+          display: flex !important;
+          flex-direction: column !important;
         }
         .octa-dropdown-item {
-          padding: 8px 12px;
-          cursor: pointer;
-          border-bottom: 1px solid #f7f8f9;
-          text-align: left;
-          background: transparent;
-          border-left: none;
-          border-right: none;
-          border-top: none;
-          width: 100%;
-          font-size: 12px;
-          transition: background 0.15s;
+          padding: 8px 12px !important;
+          cursor: pointer !important;
+          border-bottom: 1px solid #f7f8f9 !important;
+          text-align: left !important;
+          background: transparent !important;
+          border-left: none !important;
+          border-right: none !important;
+          border-top: none !important;
+          width: 100% !important;
+          font-size: 12px !important;
+          transition: background 0.15s !important;
         }
         .octa-dropdown-item:hover {
-          background: rgba(255, 198, 0, 0.12);
+          background: rgba(255, 198, 0, 0.12) !important;
         }
         .octa-item-title {
-          font-weight: 600;
-          color: #1c1b1c;
-          display: block;
+          font-weight: 600 !important;
+          color: #1c1b1c !important;
+          display: block !important;
         }
         .octa-item-preview {
-          font-size: 11px;
-          color: #5b5f63;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          margin-top: 2px;
+          font-size: 11px !important;
+          color: #5b5f63 !important;
+          white-space: nowrap !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+          margin-top: 2px !important;
         }
         .octa-dropdown-empty {
-          padding: 16px;
-          text-align: center;
-          font-size: 12px;
-          color: #5b5f63;
+          padding: 16px !important;
+          text-align: center !important;
+          font-size: 12px !important;
+          color: #5b5f63 !important;
         }
       `;
-      document.head.appendChild(style);
+      (doc.head || doc.documentElement).appendChild(style);
     }
 
     function createWidgetElement(): HTMLElement {
@@ -609,7 +662,8 @@ export default defineContentScript({
                   .replace(/(?:\{\{|\{)\s*sauda[cç][aã]o\s*(?:\}\}|\}),/gi, `${greeting},`)
                   .replace(/(?:\{\{|\{)\s*sauda[cç][aã]o\s*(?:\}\}|\})/gi, `${greeting}!`);
 
-                insertTextIntoElement(target, processed);
+                const reqId = `widget_${Date.now()}`;
+                insertTextIntoElement(target, processed, reqId);
                 dropdownMenu.style.display = 'none';
               } else {
                 alert('Campo de texto do ticket não encontrado.');
