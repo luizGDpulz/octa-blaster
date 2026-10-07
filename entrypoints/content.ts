@@ -8,7 +8,7 @@ export default defineContentScript({
   allFrames: true,
   runAt: 'document_idle',
   main() {
-    console.log('[OctaBlaster v0.2.5] Content script inicializado no frame:', window.location.href);
+    console.log('[OctaBlaster v0.2.6] Content script inicializado no frame:', window.location.href);
     let lastActiveInput: HTMLElement | null = null;
     const processedRequests = new Set<string>();
 
@@ -211,7 +211,8 @@ export default defineContentScript({
     // =========================================================================
     // WIDGET ACOPLADO AO CAMPO DE TICKETS (Somente em *.octadesk.com e em tickets)
     // =========================================================================
-    initWidgetLifecycle();
+    let activeWidget: HTMLElement | null = null;
+    let isMinimized = false;
 
     function getTopHrefSafe(): string {
       try {
@@ -274,9 +275,6 @@ export default defineContentScript({
       }
       return null;
     }
-
-    let activeWidget: HTMLElement | null = null;
-    let isMinimized = false;
 
     function initWidgetLifecycle() {
       let isChecking = false;
@@ -347,8 +345,9 @@ export default defineContentScript({
 
       // Se ainda não foi criado
       if (!activeWidget) {
+        console.log('[OctaBlaster v0.2.6] Editor de tickets encontrado no frame:', window.location.href, target);
         activeWidget = createWidgetElement();
-        console.log('[OctaBlaster] Barra de ações acoplada criada com sucesso!');
+        console.log('[OctaBlaster v0.2.6] Barra de ações acoplada criada com sucesso!');
       }
 
       // Insere antes da área de edição (no topo do card do editor)
@@ -698,5 +697,8 @@ export default defineContentScript({
         btnLicense.style.display = 'none';
       }
     }
+
+    // Inicializa o ciclo de vida do widget após todas as funções e variáveis estarem declaradas
+    initWidgetLifecycle();
   },
 });
