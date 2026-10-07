@@ -1,6 +1,6 @@
 export interface LicenseTicketInfo {
   isLicenseTicket: boolean;
-  type: 'Contratação' | 'Troca' | 'Cancelamento' | 'Outro';
+  type: 'Contratação' | 'Troca' | 'Cancelamento' | 'Renovação' | 'Outro';
   licenseType: string;
   databaseNumber?: string;
   clientName?: string;
@@ -9,165 +9,124 @@ export interface LicenseTicketInfo {
 }
 
 /**
- * Obtém o contêiner isolado do ticket específico a partir de qualquer elemento interno.
- * Garante que a busca de títulos e descrições fique restrita a este ticket,
- * sem vazar dados de outros tickets abertos em abas concorrentes.
+ * Extrai texto do elemento excluindo os próprios widgets do OctaBlaster
+ * para evitar qualquer falso positivo induzido pela própria extensão.
  */
-export function getScopedTicketContainer(el: HTMLElement): HTMLElement {
-  // 1. Tenta seletores diretos de container de ticket
-  const explicitContainer = el.closest<HTMLElement>(
-    '[ticket-id], [data-cy="ticket_content"], .ticket-container, .ticket-view, .ticket-page, .tab-pane, [role="tabpanel"], .box-white, [ticket]'
-  );
-  if (explicitContainer && explicitContainer !== el.ownerDocument.body) {
-    if (
-      explicitContainer.querySelector(
-        'h1, h2, h3, h4, [data-cy="ticket_title"], .ticket-subject, .ticket-title, .title-wrapper, [class*="ticket-title"], .interaction-description, .ticket-description, .message-content',
-      )
-    ) {
-      return explicitContainer;
-    }
+function extractCleanText(root: HTMLElement): string {
+  if (root.classList?.contains('octablaster-floating-widget')) return '';
+
+  const widgets = root.querySelectorAll<HTMLElement>('.octablaster-floating-widget');
+  if (widgets.length === 0) {
+    return root.innerText || root.textContent || '';
   }
 
-  // 2. Se não achou por seletor direto, sobe pelos ancestrais procurando o primeiro que contém título de ticket
-  let curr: HTMLElement | null = el.parentElement;
-  while (curr && curr !== curr.ownerDocument.body && curr !== curr.ownerDocument.documentElement) {
-    const hasTitle = curr.querySelector(
-      'h1, h2, h3, h4, [data-cy="ticket_title"], .ticket-subject, .ticket-title, .title-wrapper, [class*="ticket-title"]',
-    );
-    if (hasTitle) {
-      return curr;
-    }
-    curr = curr.parentElement;
+  const originalDisplays: string[] = [];
+  widgets.forEach((w, i) => {
+    originalDisplays[i] = w.style.display;
+    w.style.display = 'none';
+  });
+
+  const text = root.innerText || root.textContent || '';
+
+  widgets.forEach((w, i) => {
+    w.style.display = originalDisplays[i] ?? '';
+  });
+
+  return text;
+}
+
+/**
+ * Obtém o contêiner isolado do ticket específico a partir de qualquer elemento interno.
+ * Garante que a busca fique restrita a este ticket, sem vazar dados de outros tickets.
+ */
+export function getScopedTicketContainer(el: HTMLElement): HTMLElement {
+  // Procura contêiner de aba/painel se houver abas simultâneas no mesmo documento
+  const explicitContainer = el.closest<HTMLElement>(
+    '.tab-pane, [role="tabpanel"], .ticket-container, .ticket-view, .ticket-page, form, .main--container_X1D7w, [ticket-id]'
+  );
+  if (explicitContainer && explicitContainer !== el.ownerDocument.body) {
+    return explicitContainer;
   }
 
   return el.ownerDocument.body || el;
 }
 
 /**
- * Detecta se o ticket (ou a página) do Octadesk exibe um ticket de licença
- * (Contratação, Troca ou Cancelamento).
+ * Detecta se o ticket do Octadesk exibe um chamado de licença
+ * (Contratação, Troca, Cancelamento ou Renovação).
  * Se um HTMLElement for fornecido, a verificação é estritamente isolada àquele ticket!
  */
 export function detectLicenseTicket(scope: Document | HTMLElement = document): LicenseTicketInfo | null {
   try {
-    let detectedTitle = '';
-    let detectedBody = '';
+    let targetDoc: Document;
+    let targetRoot: HTMLElement;
 
-    const targetDoc: Document = scope instanceof HTMLElement ? scope.ownerDocument : scope;
+    if (scope instanceof HTMLElement) {
+      targetDoc = scope.ownerDocument;
+      targetRoot = getScopedTicketContainer(scope);
+    } else {
+      targetDoc = scope;
+      targetRoot = scope.body || scope.documentElement;
+    }
+
     const docTitle = targetDoc.title || '';
+    const cleanText = extractCleanText(targetRoot);
+    const fullText = `${docTitle}\n${cleanText}`;
 
-    // 1. Verifica se o título do documento deste ticket já identifica o chamado de licença
-    if (/licen[cç]a/i.test(docTitle) && /(contrata[cç][aã]o|troca|cancelamento)/i.test(docTitle)) {
-      detectedTitle = docTitle;
-    }
+    // 1. Validação essencial:
+    // Precisa conter termo de licença E operação de licença
+    const hasLicenca = /licen[cç]a/i.test(fullText);
+    const hasOperation = /(contrata[cç][aã]o|troca|cancelamento|renova[cç][aã]o)/i.test(fullText);
 
-    const targetScope: HTMLElement | Document =
-      scope instanceof HTMLElement
-        ? getScopedTicketContainer(scope) || targetDoc.body || targetDoc
-        : targetDoc;
-
-    // 2. Busca títulos e assuntos nos elementos do ticket
-    const titleCandidates = targetScope.querySelectorAll<HTMLElement>(
-      'h1, h2, h3, h4, h5, [data-cy*="title"], [data-cy*="subject"], [data-cy*="summary"], [class*="title"], [class*="subject"], [class*="summary"], input[type="text"], .ticket-subject, .ticket-title, .title-wrapper',
-    );
-
-    for (const el of Array.from(titleCandidates)) {
-      const text = el.textContent?.trim() || '';
-      if (/licen[cç]a/i.test(text) && /(contrata[cç][aã]o|troca|cancelamento)/i.test(text)) {
-        detectedTitle = text;
-        break;
-      }
-    }
-
-    if (!detectedTitle) {
-      for (const el of Array.from(titleCandidates)) {
-        const text = el.textContent?.trim() || '';
-        if (/licen[cç]a/i.test(text)) {
-          detectedTitle = text;
-          break;
-        }
-      }
-    }
-
-    // Se ainda não achou título mas docTitle contém 'licença'
-    if (!detectedTitle && /licen[cç]a/i.test(docTitle)) {
-      detectedTitle = docTitle;
-    }
-
-    // 3. Busca corpo/descrição no ticket
-    const bodyElements = targetScope.querySelectorAll<HTMLElement>(
-      '.interaction-description, .ticket-description, .message-content, .interaction-card, [class*="interaction"], [class*="description"], [class*="message"], [class*="content"], [class*="comment"], [class*="card"], p, pre, td, tr, table, div',
-    );
-
-    for (const el of Array.from(bodyElements)) {
-      const text = el.textContent || '';
-      if (/licen[cç]a/i.test(text)) {
-        if (
-          text.includes('Nome da Revenda') ||
-          text.includes('Número do Banco de Dados') ||
-          text.includes('Número de Licenças') ||
-          text.includes('Razão Social') ||
-          text.includes('Razao Social')
-        ) {
-          detectedBody = text;
-          break;
-        }
-        if (!detectedBody && /(contrata[cç][aã]o|troca|cancelamento)/i.test(text)) {
-          detectedBody = text;
-        }
-      }
-    }
-
-    // Fallback: se detectedBody ainda está vazio, verifica textContent do targetScope
-    if (!detectedBody && targetScope.textContent && /licen[cç]a/i.test(targetScope.textContent)) {
-      const fullText = targetScope.textContent;
-      if (
-        fullText.includes('Nome da Revenda') ||
-        fullText.includes('Número do Banco de Dados') ||
-        fullText.includes('Número de Licenças')
-      ) {
-        detectedBody = fullText;
-      }
-    }
-
-    // Se nem o título nem o corpo contêm padrões de licença, não é ticket de licença
-    const combined = `${detectedTitle}\n${detectedBody}`;
-    if (!/licen[cç]a/i.test(combined)) {
+    if (!hasLicenca || !hasOperation) {
       return null;
     }
 
-    if (!/(contrata[cç][aã]o|troca|cancelamento)/i.test(combined)) {
-      return null;
-    }
-
-    // Determina o tipo de operação
+    // 2. Determina o tipo de operação
     let type: LicenseTicketInfo['type'] = 'Outro';
-    if (/contrata[cç][aã]o/i.test(combined)) {
+    if (/contrata[cç][aã]o/i.test(fullText)) {
       type = 'Contratação';
-    } else if (/troca/i.test(combined)) {
+    } else if (/troca/i.test(fullText)) {
       type = 'Troca';
-    } else if (/cancelamento/i.test(combined)) {
+    } else if (/cancelamento/i.test(fullText)) {
       type = 'Cancelamento';
+    } else if (/renova[cç][aã]o/i.test(fullText)) {
+      type = 'Renovação';
     }
 
-    // Extrai número do banco de dados (ex: (169614) ou "Número do Banco de Dados: 169614")
-    const dbMatch = combined.match(/\((\d{4,8})\)/) || combined.match(/banco de dados[:\s]*(\d+)/i);
+    // 3. Extrai número do banco de dados (ex: "(169614)", "Banco de dados: 169614", "BD: 169614")
+    const dbMatch =
+      fullText.match(/(?:banco(?:\s+de\s+dados)?|bd)[:\s]*([0-9]{4,8})/i) ||
+      fullText.match(/\(([0-9]{4,8})\)/);
     const databaseNumber = dbMatch && dbMatch[1] ? dbMatch[1] : undefined;
 
-    // Extrai tipo da licença (ex: "LICENÇA FACIAL" ou "Facial")
+    // 4. Extrai tipo da licença (ex: "Licença Facial", "Licença Secullum")
     let licenseType = 'Licença Facial';
-    if (/facial/i.test(combined)) {
+    if (/facial/i.test(fullText)) {
       licenseType = 'Licença Facial';
+    } else if (/secullum/i.test(fullText)) {
+      licenseType = 'Licença Secullum';
     } else {
-      const licTypeMatch = combined.match(/licen[cç]a\s+([a-zA-Z0-9\s]+?)(?:\s*\(|\.|\n|$)/i);
+      const licTypeMatch = fullText.match(/licen[cç]a\s+([a-zA-Z0-9\s]+?)(?:\s*\(|\.|\n|$)/i);
       if (licTypeMatch && licTypeMatch[1]) {
         licenseType = `Licença ${licTypeMatch[1].trim()}`;
       }
     }
 
-    // Extrai cliente e revenda se presentes no corpo
-    const clientMatch = combined.match(/Raz[aã]o Social do Cliente[:\s]*(.+?)(?:\n|$)/i);
-    const resellerMatch = combined.match(/Nome da Revenda[:\s]*(.+?)(?:\n|$)/i);
+    // 5. Extrai Razão Social do Cliente
+    const clientMatch = fullText.match(/(?:Raz[aã]o\s+Social(?:\s+do\s+Cliente)?|Cliente)[:\s]*([^\n\r]+)/i);
+
+    // 6. Extrai Nome da Revenda
+    const resellerMatch = fullText.match(/(?:Nome\s+da\s+Revenda|Revenda)[:\s]*([^\n\r]+)/i);
+
+    // 7. Extrai título bruto se presente nas linhas do ticket
+    const lines = fullText
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+    const titleLine = lines.find(
+      (l) => /licen[cç]a/i.test(l) && /(contrata[cç][aã]o|troca|cancelamento|renova[cç][aã]o)/i.test(l),
+    );
 
     return {
       isLicenseTicket: true,
@@ -176,7 +135,7 @@ export function detectLicenseTicket(scope: Document | HTMLElement = document): L
       databaseNumber,
       clientName: clientMatch && clientMatch[1] ? clientMatch[1].trim() : undefined,
       resellerName: resellerMatch && resellerMatch[1] ? resellerMatch[1].trim() : undefined,
-      rawTitle: detectedTitle || undefined,
+      rawTitle: titleLine || (docTitle && /licen[cç]a/i.test(docTitle) ? docTitle : undefined),
     };
   } catch (error) {
     console.warn('[OctaBlaster] Erro na detecção de ticket de licença:', error);

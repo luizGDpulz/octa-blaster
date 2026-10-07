@@ -9,7 +9,7 @@ export default defineContentScript({
   matchAboutBlank: true,
   runAt: 'document_idle',
   main() {
-    console.log('[OctaBlaster v0.3.4] Content script inicializado no frame:', window.location.href);
+    console.log('[OctaBlaster v0.3.5] Content script inicializado no frame:', window.location.href);
     let lastActiveInput: HTMLElement | null = null;
     const processedRequests = new Set<string>();
 
@@ -298,7 +298,7 @@ export default defineContentScript({
      * Localiza todas as barras de abas de tickets presentes nos documentos abertos
      */
     function findTicketTabContainers(rootDoc: Document = document): HTMLElement[] {
-      const allDocs = getAllAccessibleDocuments(rootDoc);
+      const allDocs = window === window.top ? getAllAccessibleDocuments(rootDoc) : [rootDoc];
       const results: HTMLElement[] = [];
 
       for (const d of allDocs) {
@@ -630,6 +630,7 @@ export default defineContentScript({
         widget.dataset.expanded = expanded ? 'true' : 'false';
         if (expanded) {
           btnToggle.title = 'OctaBlaster';
+          updateLicenseButton(widget, container);
         } else {
           dropdownMenu.style.display = 'none';
           btnToggle.title = 'OctaBlaster (Clique para expandir)';
@@ -789,7 +790,7 @@ export default defineContentScript({
         if (btnLicense.textContent !== newText) {
           btnLicense.textContent = newText;
         }
-        btnLicense.style.display = 'inline-flex';
+        btnLicense.style.setProperty('display', 'inline-flex', 'important');
 
         if (licenseBadge) {
           licenseBadge.classList.add('is-active');
@@ -801,7 +802,7 @@ export default defineContentScript({
           }
         }
       } else {
-        btnLicense.style.display = 'none';
+        btnLicense.style.setProperty('display', 'none', 'important');
         if (licenseBadge) {
           licenseBadge.classList.remove('is-active');
         }
@@ -887,7 +888,7 @@ export default defineContentScript({
     }
 
     function startWhenReady() {
-      console.log('[OctaBlaster v0.3.3] Aguardando estabilização do carregamento da página...');
+      console.log('[OctaBlaster v0.3.5] Aguardando estabilização do carregamento da página...');
       const start = () => {
         setTimeout(initWidgetLifecycle, 1200);
       };
