@@ -565,12 +565,6 @@ export default defineContentScript({
         btnLicense.style.opacity = '0.7';
 
         const target = findVisibleNoteEditable() || findBestEditableElement();
-        if (!target) {
-          btnLicense.textContent = '❌ Campo não encontrado!';
-          setTimeout(() => updateLicenseButton(widget, target), 2000);
-          return;
-        }
-
         const res = await automateLicenseMentions(target, document);
         if (res.success) {
           btnLicense.textContent = '✅ Marcados!';
@@ -578,7 +572,7 @@ export default defineContentScript({
           btnLicense.textContent = '❌ Tente novamente';
         }
 
-        setTimeout(() => updateLicenseButton(widget, target), 2500);
+        setTimeout(() => updateLicenseButton(widget, findVisibleNoteEditable()), 2500);
       });
 
       // Dropdown de respostas rápidas

@@ -5,7 +5,43 @@ function sleep(ms: number) {
 }
 
 /**
+ * Verifica se a aba "Anotação interna" já está ativa no Octadesk.
+ */
+export function isInternalNoteTabActive(doc: Document = document): boolean {
+  // 1. Verifica no li específico do Octadesk com a classe active/yellow
+  const activeInternalLi = doc.querySelector<HTMLElement>(
+    'li.active[ng-class*="commentTypeSelected === 3"], li.active.yellow[comment-type-selected="vm.commentTypeSelected"]',
+  );
+  if (activeInternalLi) return true;
+
+  // 2. Verifica se a aba ativa na barra de comentários contém texto "Anotação interna"
+  const activeTabs = doc.querySelectorAll<HTMLElement>(
+    '.nav-comments li.active, .subarea-tabs li.active',
+  );
+  for (const tab of Array.from(activeTabs)) {
+    const text = (tab.textContent || '').toLowerCase();
+    if (text.includes('anotação') || text.includes('anotacao')) {
+      return true;
+    }
+  }
+
+  // 3. Verifica se a partial de internal comment está presente e ativa
+  const internalCommentScope = doc.querySelector<HTMLElement>(
+    'div[ng-if*="typeInteractionSelected == 3"], div[ng-include*="comments/internal.html"]',
+  );
+  if (internalCommentScope && internalCommentScope.offsetParent !== null) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Procura e ativa a aba "Anotação interna" no Octadesk.
+ * Baseado na estrutura:
+ * <li ng-class="{'active yellow': vm.commentTypeSelected === 3}" ...>
+ *   <a ng-click="vm.commentTypeSelected = 3; vm.showReply = true"><i class="icon-edit"></i> Anotação interna</a>
+ * </li>
  */
 export async function switchToInternalNote(doc: Document = document): Promise<boolean> {
   const allDocs = [doc];
@@ -17,36 +53,38 @@ export async function switchToInternalNote(doc: Document = document): Promise<bo
   });
 
   for (const d of allDocs) {
-    // Seletores de abas e botões de tipo de interação no Octadesk
-    const elements = d.querySelectorAll<HTMLElement>(
-      'button, a, div, span, [role="tab"], .ticket-interaction-type',
+    if (isInternalNoteTabActive(d)) {
+      return true;
+    }
+
+    // 1. Seletor exato do Angular no Octadesk
+    const specificLink = d.querySelector<HTMLElement>(
+      'a[ng-click*="commentTypeSelected = 3"], li[ng-class*="commentTypeSelected === 3"] > a',
     );
 
-    for (const el of Array.from(elements)) {
-      const text = (el.textContent || '').trim().toLowerCase();
-      const ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
-      const title = (el.getAttribute('title') || '').toLowerCase();
+    if (specificLink) {
+      // Dispara eventos de clique no link da aba (não na estrelinha de favorito)
+      specificLink.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      specificLink.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+      specificLink.click();
+      await sleep(300);
+      return true;
+    }
 
-      const isInternal =
-        text.includes('anotação interna') ||
-        text.includes('anotacao interna') ||
-        text.includes('nota interna') ||
-        text === 'anotação' ||
-        text === 'anotacao' ||
-        ariaLabel.includes('anotação interna') ||
-        title.includes('anotação interna');
-
-      if (isInternal && el.offsetParent !== null) {
-        // Se já não estiver com classe de selecionado/ativo
-        const isActive =
-          el.classList.contains('active') ||
-          el.classList.contains('selected') ||
-          el.getAttribute('aria-selected') === 'true';
-
-        if (!isActive) {
-          el.click();
-          await sleep(250);
-        }
+    // 2. Fallback: procura por qualquer link/item de navegação com o texto "Anotação interna"
+    const navItems = d.querySelectorAll<HTMLElement>(
+      '.nav-comments a, .subarea-tabs a, .nav-tabs a, nav a',
+    );
+    for (const item of Array.from(navItems)) {
+      const text = (item.textContent || '').trim().toLowerCase();
+      if (
+        (text.includes('anotação interna') || text.includes('anotacao interna')) &&
+        !item.classList.contains('favorite')
+      ) {
+        item.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+        item.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+        item.click();
+        await sleep(300);
         return true;
       }
     }
@@ -56,13 +94,58 @@ export async function switchToInternalNote(doc: Document = document): Promise<bo
 }
 
 /**
+ * Aguarda o AngularJS renderizar e exibir o editor de Anotação Interna no DOM
+ */
+export async function waitForInternalNoteEditor(
+  doc: Document = document,
+  maxWaitMs: number = 4000,
+): Promise<HTMLElement | null> {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < maxWaitMs) {
+    const allDocs = [doc];
+    const iframes = doc.querySelectorAll<HTMLIFrameElement>('iframe');
+    iframes.forEach((ifr) => {
+      try {
+        if (ifr.contentDocument) allDocs.push(ifr.contentDocument);
+      } catch {}
+    });
+
+    for (const d of allDocs) {
+      const isInternal = isInternalNoteTabActive(d);
+      const editables = d.querySelectorAll<HTMLElement>('.note-editable');
+
+      for (const el of Array.from(editables)) {
+        const rect = el.getBoundingClientRect();
+        const win = el.ownerDocument.defaultView || window;
+        const style = win.getComputedStyle(el);
+        if (
+          rect.width > 30 &&
+          rect.height > 20 &&
+          style.display !== 'none' &&
+          style.visibility !== 'hidden'
+        ) {
+          if (isInternal) {
+            return el;
+          }
+        }
+      }
+    }
+
+    await sleep(100);
+  }
+
+  return doc.querySelector<HTMLElement>('.note-editable');
+}
+
+/**
  * Aguarda e seleciona uma pessoa no popover de menção do Octadesk
  * (<div class="popover-content note-children-container">...<span class="ng-binding">Nome</span>...)
  */
 async function selectPersonFromPopover(
   namePattern: RegExp,
   doc: Document = document,
-  maxWaitMs: number = 3000,
+  maxWaitMs: number = 3500,
 ): Promise<boolean> {
   const startTime = Date.now();
 
@@ -76,7 +159,7 @@ async function selectPersonFromPopover(
     });
 
     for (const d of allDocs) {
-      // Busca pelo popover e itens de sugestão
+      // Busca pelo popover e itens de sugestão (.popover-content.note-children-container)
       const items = d.querySelectorAll<HTMLElement>(
         '.popover-content .note-hint-item, .note-children-container .person-item, .note-hint-item, .person-item, .popover-content li, .dropdown-menu li',
       );
@@ -84,11 +167,13 @@ async function selectPersonFromPopover(
       for (const item of Array.from(items)) {
         const text = (item.textContent || '').trim();
         if (namePattern.test(text)) {
-          // Dispara eventos completos de clique
-          item.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
-          item.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-          item.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
-          item.click();
+          // O elemento clicável pode ser o .note-hint-item ou o .person-item
+          const targetItem = (item.closest('.note-hint-item') as HTMLElement) || item;
+          targetItem.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+          targetItem.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+          targetItem.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+          targetItem.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+          targetItem.click();
           return true;
         }
       }
@@ -102,57 +187,83 @@ async function selectPersonFromPopover(
 
 /**
  * Executa o fluxo automatizado de marcação de licenças:
- * 1. Muda para Anotação Interna
- * 2. Digita @Jorge e seleciona Jorge Tigre no popover
- * 3. Digita @Roberto e seleciona Roberto Renck no popover
+ * 1. Verifica se está em Anotação Interna; se não estiver, muda automaticamente para Anotação interna
+ * 2. Aguarda o editor de anotação interna renderizar
+ * 3. Digita @Jorge e seleciona Jorge Tigre no popover
+ * 4. Digita @roberto e seleciona Roberto Renck no popover
  */
 export async function automateLicenseMentions(
-  editor: HTMLElement,
+  editor?: HTMLElement | null,
   doc: Document = document,
 ): Promise<{ success: boolean; message: string }> {
   try {
+    let targetEditor = editor;
+
     // Passo 1: Garantir que está na aba de Anotação Interna
-    await switchToInternalNote(doc);
+    const isAlreadyInternal = isInternalNoteTabActive(doc);
+    if (!isAlreadyInternal) {
+      console.log('[OctaBlaster] Resposta pública detectada. Alternando para Anotação interna...');
+      await switchToInternalNote(doc);
+      // Aguarda o Angular renderizar o novo editor Summernote da Anotação interna
+      targetEditor = await waitForInternalNoteEditor(doc, 4000);
+    } else if (!targetEditor) {
+      targetEditor = await waitForInternalNoteEditor(doc, 2000);
+    }
+
+    if (!targetEditor) {
+      return {
+        success: false,
+        message: 'Editor de Anotação Interna não encontrado.',
+      };
+    }
+
+    // Foca no editor de Anotação Interna
+    targetEditor.focus();
     await sleep(200);
 
-    editor.focus();
+    // Passo 2: Digitar @Jorge e acionar menção
+    insertTextIntoElement(targetEditor, '@Jorge');
 
-    // Passo 2: Digitar @Jorge
-    insertTextIntoElement(editor, '@Jorge');
-    // Simula evento de teclado para abrir o popover de menções
-    editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'e', bubbles: true }));
-    editor.dispatchEvent(new KeyboardEvent('keyup', { key: 'e', bubbles: true }));
+    // Dispara eventos de input e tecla para ativar o Summernote hint popover
+    targetEditor.dispatchEvent(new KeyboardEvent('keydown', { key: 'e', code: 'KeyE', bubbles: true }));
+    targetEditor.dispatchEvent(new Event('input', { bubbles: true }));
+    targetEditor.dispatchEvent(new KeyboardEvent('keyup', { key: 'e', code: 'KeyE', bubbles: true }));
 
     // Aguarda o popover e seleciona Jorge Tigre
     const selectedJorge = await selectPersonFromPopover(/jorge\s+tigre/i, doc, 3500);
 
     if (!selectedJorge) {
       // Se não abriu o popover ou demorou, tenta com enter
-      editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+      targetEditor.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, which: 13, bubbles: true }),
+      );
     }
 
     await sleep(400);
 
     // Passo 3: Inserir espaço e digitar @roberto
-    insertTextIntoElement(editor, ' @roberto');
-    editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'o', bubbles: true }));
-    editor.dispatchEvent(new KeyboardEvent('keyup', { key: 'o', bubbles: true }));
+    insertTextIntoElement(targetEditor, ' @roberto');
+    targetEditor.dispatchEvent(new KeyboardEvent('keydown', { key: 'o', code: 'KeyO', bubbles: true }));
+    targetEditor.dispatchEvent(new Event('input', { bubbles: true }));
+    targetEditor.dispatchEvent(new KeyboardEvent('keyup', { key: 'o', code: 'KeyO', bubbles: true }));
 
     // Aguarda o popover e seleciona Roberto Renck
     const selectedRoberto = await selectPersonFromPopover(/roberto\s+renck/i, doc, 3500);
 
     if (!selectedRoberto) {
-      editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+      targetEditor.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, which: 13, bubbles: true }),
+      );
     }
 
     await sleep(300);
 
     // Adiciona espaço final
-    insertTextIntoElement(editor, ' ');
+    insertTextIntoElement(targetEditor, ' ');
 
     return {
       success: true,
-      message: 'Responsáveis de Licenças (@Jorge Tigre e @Roberto Renck) marcados com sucesso!',
+      message: 'Responsáveis de Licenças (@Jorge Tigre e @Roberto Renck) marcados com sucesso em Anotação Interna!',
     };
   } catch (error) {
     console.error('[OctaBlaster] Erro ao automatizar menções de licenças:', error);
