@@ -8,7 +8,7 @@ export default defineContentScript({
   allFrames: true,
   runAt: 'document_idle',
   main() {
-    console.log('[OctaBlaster v0.2.6] Content script inicializado no frame:', window.location.href);
+    console.log('[OctaBlaster v0.2.7] Content script inicializado no frame:', window.location.href);
     let lastActiveInput: HTMLElement | null = null;
     const processedRequests = new Set<string>();
 
@@ -214,107 +214,82 @@ export default defineContentScript({
     let activeWidget: HTMLElement | null = null;
     let isMinimized = false;
 
-    function getTopHrefSafe(): string {
-      try {
-        return window.top?.location.href || window.location.href;
-      } catch {
-        return window.location.href;
-      }
-    }
-
     function isOctadeskTicketsContext(): boolean {
       const host = window.location.hostname.toLowerCase();
-      const href = getTopHrefSafe().toLowerCase();
+      const href = window.location.href.toLowerCase();
 
-      // Aceita app.octadesk.com, *.octadesk.com ou localhost
-      const isOctaHost = host.includes('octadesk.com') || href.includes('octadesk.com') || host === 'localhost';
+      // Valida se o domínio pertence ao Octadesk ou localhost
+      const isOctaHost = host.includes('octadesk.com') || host === 'localhost';
       if (!isOctaHost) return false;
 
-      // Verifica se a rota é de tickets (/ticket, #/ticket, tickets) OU se já existe um editor de tickets no DOM
-      const isTicketRoute = href.includes('ticket') || !!findVisibleNoteEditable();
-      return isTicketRoute;
+      // Valida se é uma rota de ticket
+      return href.includes('ticket');
     }
 
-    function findVisibleNoteEditable(doc: Document = document): HTMLElement | null {
+    function findVisibleNoteEditable(): HTMLElement | null {
       try {
-        const editables = doc.querySelectorAll<HTMLElement>('.note-editable');
+        const editables = document.querySelectorAll<HTMLElement>('.note-editable');
         for (const el of Array.from(editables)) {
-          const win = el.ownerDocument.defaultView || window;
-          const style = win.getComputedStyle(el);
-          const rect = el.getBoundingClientRect();
-
-          const isNotHidden =
-            style.display !== 'none' &&
-            style.visibility !== 'hidden' &&
-            style.opacity !== '0';
-
-          const hasDimensions =
-            rect.width > 10 ||
-            el.offsetWidth > 10 ||
-            el.offsetParent !== null ||
-            Boolean(el.style.height);
-
-          if (isNotHidden && hasDimensions) {
+          // Checagem rápida de visibilidade sem forçar reflow pesado
+          if (el.offsetWidth > 10 || el.offsetHeight > 10 || el.getClientRects().length > 0) {
             return el;
           }
         }
-
-        // Procura também em iframes acessíveis do mesmo documento
-        const iframes = doc.querySelectorAll<HTMLIFrameElement>('iframe');
-        for (const ifr of Array.from(iframes)) {
-          try {
-            const childDoc = ifr.contentDocument || ifr.contentWindow?.document;
-            if (childDoc) {
-              const childEl = findVisibleNoteEditable(childDoc);
-              if (childEl) return childEl;
-            }
-          } catch {}
-        }
       } catch (err) {
-        console.warn('[OctaBlaster] Erro ao buscar editor .note-editable:', err);
+        console.warn('[OctaBlaster] Erro ao buscar editor:', err);
       }
       return null;
     }
 
     function initWidgetLifecycle() {
-      let isChecking = false;
-      const runCheck = () => {
-        if (isChecking) return;
-        isChecking = true;
-        try {
+      let debounceTimer: number | undefined;
+
+      const scheduleCheck = () => {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = window.setTimeout(() => {
+          debounceTimer = undefined;
           updateWidgetLifecycle();
-        } finally {
-          isChecking = false;
-        }
+        }, 350);
       };
 
-      runCheck();
-      setInterval(runCheck, 1000);
+      // Executa a primeira checagem após carregamento inicial
+      scheduleCheck();
 
-      window.addEventListener('popstate', runCheck);
-      window.addEventListener('hashchange', runCheck);
+      window.addEventListener('popstate', scheduleCheck);
+      window.addEventListener('hashchange', scheduleCheck);
 
-      const observer = new MutationObserver(() => {
-        runCheck();
+      const observer = new MutationObserver((mutations) => {
+        // Se a barra já está acoplada e conectada, ignora qualquer mutação para poupar 100% de CPU
+        if (activeWidget && activeWidget.isConnected) return;
+
+        // Ignora mutações internas do próprio widget
+        const isExternal = mutations.some((m) => {
+          const el = m.target as HTMLElement | null;
+          return !el?.closest?.('#octablaster-inpage-widget') && el?.id !== 'octablaster-inpage-styles';
+        });
+
+        if (isExternal) {
+          scheduleCheck();
+        }
       });
 
       if (document.body) {
         observer.observe(document.body, { childList: true, subtree: true });
-      } else {
-        document.addEventListener('DOMContentLoaded', () => {
-          if (document.body) {
-            observer.observe(document.body, { childList: true, subtree: true });
-          }
-        });
       }
     }
 
     function updateWidgetLifecycle() {
-      const isTickets = isOctadeskTicketsContext();
-      const target = findVisibleNoteEditable();
+      // Se o widget já está criado e conectado ao DOM, não re-insere (elimina loop)
+      if (activeWidget && activeWidget.isConnected) {
+        updateLicenseButton(activeWidget);
+        return;
+      }
 
-      // Só deve aparecer estritamente quando estiver no contexto do Octadesk com o editor de tickets presente
-      if (!isTickets || !target) {
+      const isTickets = isOctadeskTicketsContext();
+      if (!isTickets) return;
+
+      const target = findVisibleNoteEditable();
+      if (!target) {
         if (activeWidget) {
           activeWidget.remove();
           activeWidget = null;
@@ -322,8 +297,7 @@ export default defineContentScript({
         return;
       }
 
-      const targetDoc = target.ownerDocument || document;
-      ensureWidgetStyles(targetDoc);
+      ensureWidgetStyles(document);
 
       // Localiza o container do Summernote (.note-editor) ou o pai direto
       const editorBox = target.closest('.note-editor') as HTMLElement | null;
@@ -332,34 +306,19 @@ export default defineContentScript({
 
       if (!mountParent) return;
 
-      // Se já está montado imediatamente antes da área de edição, apenas atualiza botões
-      if (
-        activeWidget &&
-        activeWidget.parentElement === mountParent &&
-        activeWidget.nextElementSibling === editingArea
-      ) {
-        activeWidget.style.display = 'flex';
-        updateLicenseButton(activeWidget, target);
-        return;
-      }
-
-      // Se ainda não foi criado
       if (!activeWidget) {
-        console.log('[OctaBlaster v0.2.6] Editor de tickets encontrado no frame:', window.location.href, target);
         activeWidget = createWidgetElement();
-        console.log('[OctaBlaster v0.2.6] Barra de ações acoplada criada com sucesso!');
+        console.log('[OctaBlaster v0.2.7] Barra de ações acoplada criada com sucesso!');
       }
 
-      // Insere antes da área de edição (no topo do card do editor)
+      // Insere uma única vez antes da área de edição
       mountParent.insertBefore(activeWidget, editingArea);
       activeWidget.style.display = 'flex';
 
-      // Previne que containers pais com overflow cortem o dropdown
       mountParent.style.overflow = 'visible';
       if (editorBox) editorBox.style.overflow = 'visible';
-      if (target.parentElement) target.parentElement.style.overflow = 'visible';
 
-      updateLicenseButton(activeWidget, target);
+      updateLicenseButton(activeWidget);
     }
 
     function ensureWidgetStyles(doc: Document = document) {
@@ -617,7 +576,7 @@ export default defineContentScript({
           btnLicense.textContent = '❌ Tente novamente';
         }
 
-        setTimeout(() => updateLicenseButton(widget, findVisibleNoteEditable()), 2500);
+        setTimeout(() => updateLicenseButton(widget), 2500);
       });
 
       // Dropdown de respostas rápidas
@@ -684,17 +643,24 @@ export default defineContentScript({
       return widget;
     }
 
-    function updateLicenseButton(widget: HTMLElement, target: HTMLElement | null) {
+    function updateLicenseButton(widget: HTMLElement) {
       const btnLicense = widget.querySelector('#octa-btn-license') as HTMLElement | null;
       if (!btnLicense) return;
 
       const info = detectLicenseTicket(document);
       if (info && info.isLicenseTicket) {
-        btnLicense.style.display = 'inline-flex';
         const typeLabel = info.type !== 'Outro' ? info.type : 'Licença';
-        btnLicense.textContent = `🏷️ Marcar (${typeLabel})`;
+        const newText = `🏷️ Marcar (${typeLabel})`;
+        if (btnLicense.textContent !== newText) {
+          btnLicense.textContent = newText;
+        }
+        if (btnLicense.style.display !== 'inline-flex') {
+          btnLicense.style.display = 'inline-flex';
+        }
       } else {
-        btnLicense.style.display = 'none';
+        if (btnLicense.style.display !== 'none') {
+          btnLicense.style.display = 'none';
+        }
       }
     }
 
