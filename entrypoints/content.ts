@@ -9,7 +9,7 @@ export default defineContentScript({
   matchAboutBlank: true,
   runAt: 'document_idle',
   main() {
-    console.log('[OctaBlaster v0.2.9] Content script inicializado no frame:', window.location.href);
+    console.log('[OctaBlaster v0.3.0] Content script inicializado no frame:', window.location.href);
     let lastActiveInput: HTMLElement | null = null;
     const processedRequests = new Set<string>();
 
@@ -213,7 +213,7 @@ export default defineContentScript({
     // WIDGET ACOPLADO AO CAMPO DE TICKETS (Somente em *.octadesk.com e em tickets)
     // =========================================================================
     let activeWidget: HTMLElement | null = null;
-    let isMinimized = false;
+    let isExpanded = false;
 
     function isOctadeskTicketsContext(): boolean {
       try {
@@ -277,7 +277,13 @@ export default defineContentScript({
             for (const el of Array.from(candidates)) {
               const win = el.ownerDocument.defaultView || window;
               const style = win.getComputedStyle(el);
-              if (style.display !== 'none' && style.visibility !== 'hidden') {
+              const rect = el.getBoundingClientRect();
+              if (
+                rect.width >= 50 &&
+                rect.height >= 30 &&
+                style.display !== 'none' &&
+                style.visibility !== 'hidden'
+              ) {
                 return el;
               }
             }
@@ -293,7 +299,12 @@ export default defineContentScript({
             const win = el.ownerDocument.defaultView || window;
             const style = win.getComputedStyle(el);
             const rect = el.getBoundingClientRect();
-            if (rect.height > 30 && style.display !== 'none' && style.visibility !== 'hidden') {
+            if (
+              rect.width >= 50 &&
+              rect.height >= 30 &&
+              style.display !== 'none' &&
+              style.visibility !== 'hidden'
+            ) {
               return el;
             }
           }
@@ -304,12 +315,27 @@ export default defineContentScript({
     }
 
     function initWidgetLifecycle() {
-      // Checagem imediata e depois a cada 800ms sem MutationObserver (0% de impacto na carga do Octadesk)
       updateWidgetLifecycle();
       window.setInterval(updateWidgetLifecycle, 800);
 
-      window.addEventListener('popstate', updateWidgetLifecycle);
-      window.addEventListener('hashchange', updateWidgetLifecycle);
+      window.addEventListener('popstate', () => setTimeout(updateWidgetLifecycle, 600));
+      window.addEventListener('hashchange', () => setTimeout(updateWidgetLifecycle, 600));
+    }
+
+    function startWhenReady() {
+      console.log('[OctaBlaster v0.3.0] Aguardando estabilização do carregamento da página...');
+      const start = () => {
+        // Aguarda 1.2s para garantir que AngularJS/SPA finalizou a renderização inicial
+        setTimeout(initWidgetLifecycle, 1200);
+      };
+
+      if (document.readyState === 'complete') {
+        start();
+      } else {
+        window.addEventListener('load', start, { once: true });
+        // Fallback de segurança se o evento já disparou
+        setTimeout(start, 2500);
+      }
     }
 
     function updateWidgetLifecycle() {
@@ -321,26 +347,33 @@ export default defineContentScript({
         return;
       }
 
-      // 2. Procura o campo de edição do ticket
+      // 2. Procura o campo de edição do ticket com dimensões reais
       const target = findVisibleNoteEditable(document);
       if (!target) return;
 
       const targetDoc = target.ownerDocument || document;
 
       // 3. Se já existe um widget montado neste documento, apenas atualiza
-      const existingWidget = targetDoc.getElementById('octablaster-inpage-widget');
+      const existingWidget = targetDoc.getElementById('octablaster-floating-widget');
       if (existingWidget && existingWidget.isConnected) {
         activeWidget = existingWidget;
         updateLicenseButton(activeWidget, targetDoc);
         return;
       }
 
-      // 4. Localiza o container do Summernote (.note-editor) ou o container pai
+      // 4. Localiza o contêiner do Summernote para ancorar o botão flutuante
       const editorBox = target.closest('.note-editor') as HTMLElement | null;
-      const editingArea = (editorBox?.querySelector('.note-editing-area') as HTMLElement | null) || target;
-      const mountParent = editorBox || target.parentElement;
+      const editingArea = (editorBox?.querySelector('.note-editing-area') as HTMLElement | null) || target.parentElement;
+      const anchorParent = editingArea || editorBox || target.parentElement;
 
-      if (!mountParent) return;
+      if (!anchorParent) return;
+
+      // Assegura que o contêiner suporte position: absolute
+      const win = anchorParent.ownerDocument.defaultView || window;
+      const compPos = win.getComputedStyle(anchorParent).position;
+      if (compPos === 'static') {
+        anchorParent.style.position = 'relative';
+      }
 
       ensureWidgetStyles(targetDoc);
 
@@ -348,16 +381,14 @@ export default defineContentScript({
         activeWidget = createWidgetElement(targetDoc);
       }
 
-      // 5. Insere a barra no topo da área de edição
-      mountParent.insertBefore(activeWidget, editingArea);
-      activeWidget.style.display = 'flex';
-
-      mountParent.style.overflow = 'visible';
-      if (editorBox) editorBox.style.overflow = 'visible';
+      // 5. Anexa o botão flutuante no canto superior direito do contêiner (não invade layout)
+      if (!anchorParent.contains(activeWidget)) {
+        anchorParent.appendChild(activeWidget);
+      }
 
       updateLicenseButton(activeWidget, targetDoc);
-      console.log(`[OctaBlaster v0.2.9] Editor detectado no documento (${targetDoc.location?.href || 'iframe'}):`, target);
-      console.log('[OctaBlaster v0.2.9] Barra acoplada montada com sucesso!');
+      console.log(`[OctaBlaster v0.3.0] Editor detectado no documento (${targetDoc.location?.href || 'iframe'}):`, target);
+      console.log('[OctaBlaster v0.3.0] Botão flutuante acoplado com sucesso!');
     }
 
     function ensureWidgetStyles(doc: Document = document) {
@@ -367,34 +398,34 @@ export default defineContentScript({
       const style = doc.createElement('style');
       style.id = STYLE_ID;
       style.textContent = `
-        #octablaster-inpage-widget {
+        #octablaster-floating-widget {
+          position: absolute !important;
+          top: 8px !important;
+          right: 12px !important;
+          z-index: 1050 !important;
           display: flex !important;
-          justify-content: flex-end !important;
           align-items: center !important;
-          width: 100% !important;
-          padding: 4px 8px !important;
-          box-sizing: border-box !important;
-          background: #1c1b1c !important;
-          border-bottom: 1px solid #3c3f43 !important;
-          border-top-left-radius: 4px !important;
-          border-top-right-radius: 4px !important;
           font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
           font-size: 13px !important;
-          position: relative !important;
-          z-index: 1050 !important;
           user-select: none !important;
+          pointer-events: auto !important;
         }
         .octa-bar-container {
           position: relative !important;
           display: inline-flex !important;
           align-items: center !important;
-          background: #252425 !important;
+          background: #1c1b1c !important;
           color: #ffffff !important;
           border-radius: 20px !important;
-          padding: 2px 6px !important;
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3) !important;
+          padding: 3px 6px !important;
+          box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45) !important;
           border: 1px solid #3c3f43 !important;
+          transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
           user-select: none !important;
+        }
+        .octa-bar-container:hover {
+          border-color: #ffc600 !important;
+          box-shadow: 0 4px 18px rgba(255, 198, 0, 0.25) !important;
         }
         .octa-pill-btn {
           display: flex !important;
@@ -405,13 +436,27 @@ export default defineContentScript({
           color: #ffffff !important;
           font-weight: 700 !important;
           cursor: pointer !important;
-          padding: 3px 8px !important;
+          padding: 3px 6px !important;
           font-size: 12px !important;
           border-radius: 14px !important;
           transition: background 0.15s !important;
         }
         .octa-pill-btn:hover {
-          background: rgba(255, 255, 255, 0.08) !important;
+          background: rgba(255, 255, 255, 0.1) !important;
+        }
+        .octa-badge-dot {
+          width: 8px !important;
+          height: 8px !important;
+          background: #ffc600 !important;
+          border-radius: 50% !important;
+          display: inline-block !important;
+          box-shadow: 0 0 6px #ffc600 !important;
+          animation: octa-pulse-dot 1.6s infinite !important;
+          margin-left: -2px !important;
+        }
+        @keyframes octa-pulse-dot {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.4); opacity: 0.5; }
         }
         .octa-bar-text {
           color: #dee0e4 !important;
@@ -428,6 +473,7 @@ export default defineContentScript({
           align-items: center !important;
           gap: 6px !important;
           margin-left: 4px !important;
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
         }
         .octa-action-btn {
           background: #3c3f43 !important;
@@ -543,17 +589,18 @@ export default defineContentScript({
 
     function createWidgetElement(doc: Document = document): HTMLElement {
       const widget = doc.createElement('div');
-      widget.id = 'octablaster-inpage-widget';
+      widget.id = 'octablaster-floating-widget';
       widget.innerHTML = `
         <div class="octa-bar-container">
-          <button id="octa-btn-toggle" class="octa-pill-btn" title="OctaBlaster">
+          <button id="octa-btn-toggle" class="octa-pill-btn" title="OctaBlaster (Clique para expandir)">
             <svg class="octa-logo-svg" viewBox="0 0 498.69 498.69" width="16" height="16" fill="#ffc600" aria-hidden="true">
               <path d="M6.14,102C11.14,49.59,49.47,10.93,101.89,6,137.18,2.69,185.36,0,249.34,0s114.33,2.76,149.83,6.18c51.07,4.92,88.41,42.26,93.34,93.34,3.42,35.5,6.18,84.39,6.18,149.83s-2.76,114.32-6.18,149.82c-4.93,51.08-42.27,88.42-93.34,93.34-35.5,3.42-84.4,6.18-149.83,6.18s-112.16-2.63-147.45-6c-52.42-4.93-90.73-43.59-95.75-96C2.74,361.07,0,312.69,0,249.3S2.72,137.57,6.14,102m392.8,209.12c-3.01-11.83-15.03-18.98-26.86-16-6.28,1.42-12.77,1.74-19.16,.93-15.58-1.65-36-16.44-39.76-37.9-1.09-12.34,4.58-21.56,11.24-31.43,9-13.28,17.33-29.82,17.33-51.11,0-47.74-43.63-90.33-92.34-90.33s-93.78,39.72-93.78,90.28c0,21.29,9.82,37.83,18.82,51.11,6.66,9.88,12.33,19.08,11.24,31.43-1.08,17.13-24.21,36.25-39.76,37.9-6.39,.81-12.88,.49-19.16-.93-11.84-3.01-23.88,4.15-26.89,15.99h0c-1.43,5.69-.54,11.71,2.47,16.73,3.02,5.03,7.92,8.66,13.61,10.08,7.41,1.82,15.02,2.72,22.65,2.68,4.01,0,8.02-.22,12-.65,9.92-.9,19.58-3.65,28.48-8.11,5.4-1.37,10.41-3.95,14.65-7.55,2.42-1.88,4-3.09,5.28-2.21,3,2,2.76,4.6,1.58,7.5-.26,.58-.53,1.16-.81,1.73-.92,1.67-1.92,3.29-3,4.85-.63,.94-1.23,1.84-1.73,2.65-2.89,4.73-.49,1.07,4-5.91-1.8,3.46-3.85,6.79-6.14,9.95-9,12.35-16.76,21.68-23.8,28.54-6.41,6.23-8.42,15.71-5.08,24,4.62,11.35,17.56,16.81,28.92,12.19,2.64-1.07,5.04-2.64,7.08-4.62,8.85-8.63,18.26-19.8,28.7-34.2,8.75-12.12,15.27-25.7,19.26-40.11,.64-.84,1.51-1.47,2.51-1.8,3.95,15.06,10.65,29.27,19.75,41.91,10.48,14.4,19.86,25.57,28.71,34.2,8.71,8.55,22.71,8.41,31.26-.3s8.41-22.71-.31-31.25c-7-6.86-14.82-16.19-23.8-28.54-4.56-6.33-8.18-13.29-10.74-20.66,.44-.77,1.06-1.43,1.81-1.91,1.33-.86,2.87,.35,5.27,2.22,3.96,3.36,8.58,5.84,13.57,7.29,8.7,5.2,19.1,8.8,32.23,10.19,3.99,.43,7.99,.65,12,.65,7.63,.04,15.24-.86,22.65-2.68,8.69-2.16,15.22-9.36,16.52-18.22,.42-2.88,.26-5.81-.47-8.62v.05Zm-141.94-122c0,14.66,7.93,18.34,17.72,18.34s17.69-3.69,17.69-18.34-8-21.44-17.82-21.44-17.59,6.74-17.59,21.4v.04Zm-52.67,0c0,14.53,7.85,18.11,17.54,18.11s17.53-3.59,17.53-18.11-7.92-21.2-17.66-21.2-17.41,6.64-17.41,21.16v.04Z" />
             </svg>
-            <span class="octa-bar-text">OctaBlaster</span>
+            <span id="octa-bar-label" class="octa-bar-text" style="display: none;">OctaBlaster</span>
+            <span id="octa-license-badge" class="octa-badge-dot" style="display: none;" title="Ticket de licença detectado!"></span>
           </button>
           
-          <div id="octa-bar-actions" class="octa-bar-actions">
+          <div id="octa-bar-actions" class="octa-bar-actions" style="display: none;">
             <!-- Botão de licença inserido dinamicamente se detectado -->
             <button id="octa-btn-license" class="octa-action-btn octa-license-btn" style="display: none;" title="Mudar para nota interna e marcar @Jorge Tigre e @Roberto Renck">
               🏷️ Marcar Licenças
@@ -564,7 +611,7 @@ export default defineContentScript({
               📋 Respostas
             </button>
 
-            <button id="octa-btn-minimize" class="octa-min-btn" title="Minimizar">✕</button>
+            <button id="octa-btn-minimize" class="octa-min-btn" title="Recolher">✕</button>
           </div>
 
           <!-- Dropdown com os modelos salvos -->
@@ -578,6 +625,8 @@ export default defineContentScript({
       `;
 
       const btnToggle = widget.querySelector('#octa-btn-toggle') as HTMLElement;
+      const barLabel = widget.querySelector('#octa-bar-label') as HTMLElement;
+      const licenseBadge = widget.querySelector('#octa-license-badge') as HTMLElement;
       const barActions = widget.querySelector('#octa-bar-actions') as HTMLElement;
       const btnLicense = widget.querySelector('#octa-btn-license') as HTMLElement;
       const btnReplies = widget.querySelector('#octa-btn-replies') as HTMLElement;
@@ -585,20 +634,30 @@ export default defineContentScript({
       const dropdownMenu = widget.querySelector('#octa-dropdown-menu') as HTMLElement;
       const dropdownList = widget.querySelector('#octa-dropdown-list') as HTMLElement;
 
-      // Minimizar / Expandir
-      btnMinimize.addEventListener('click', (e) => {
-        e.stopPropagation();
-        isMinimized = true;
-        barActions.style.display = 'none';
-        dropdownMenu.style.display = 'none';
-      });
+      function setExpanded(expanded: boolean) {
+        isExpanded = expanded;
+        if (expanded) {
+          barActions.style.display = 'flex';
+          barLabel.style.display = 'inline';
+          btnToggle.title = 'OctaBlaster';
+          licenseBadge.style.display = 'none';
+        } else {
+          barActions.style.display = 'none';
+          barLabel.style.display = 'none';
+          dropdownMenu.style.display = 'none';
+          btnToggle.title = 'OctaBlaster (Clique para expandir)';
+          updateLicenseButton(widget, doc);
+        }
+      }
 
       btnToggle.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (isMinimized) {
-          isMinimized = false;
-          barActions.style.display = 'flex';
-        }
+        setExpanded(!isExpanded);
+      });
+
+      btnMinimize.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setExpanded(false);
       });
 
       // Ação do botão de licença
@@ -692,6 +751,7 @@ export default defineContentScript({
 
     function updateLicenseButton(widget: HTMLElement, doc: Document = document) {
       const btnLicense = widget.querySelector('#octa-btn-license') as HTMLElement | null;
+      const licenseBadge = widget.querySelector('#octa-license-badge') as HTMLElement | null;
       if (!btnLicense) return;
 
       const info = detectLicenseTicket(doc);
@@ -701,17 +761,20 @@ export default defineContentScript({
         if (btnLicense.textContent !== newText) {
           btnLicense.textContent = newText;
         }
-        if (btnLicense.style.display !== 'inline-flex') {
-          btnLicense.style.display = 'inline-flex';
+        btnLicense.style.display = 'inline-flex';
+
+        if (licenseBadge) {
+          licenseBadge.style.display = isExpanded ? 'none' : 'inline-block';
         }
       } else {
-        if (btnLicense.style.display !== 'none') {
-          btnLicense.style.display = 'none';
+        btnLicense.style.display = 'none';
+        if (licenseBadge) {
+          licenseBadge.style.display = 'none';
         }
       }
     }
 
-    // Inicializa o ciclo de vida do widget após todas as funções e variáveis estarem declaradas
-    initWidgetLifecycle();
+    // Inicializa o ciclo de vida aguardando a estabilização completa da página
+    startWhenReady();
   },
 });
