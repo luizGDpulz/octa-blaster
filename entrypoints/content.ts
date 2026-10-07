@@ -9,7 +9,7 @@ export default defineContentScript({
   matchAboutBlank: true,
   runAt: 'document_idle',
   main() {
-    console.log('[OctaBlaster v0.3.6] Content script inicializado no frame:', window.location.href);
+    console.log('[OctaBlaster v0.3.7] Content script inicializado no frame:', window.location.href);
     let lastActiveInput: HTMLElement | null = null;
     const processedRequests = new Set<string>();
 
@@ -817,12 +817,27 @@ export default defineContentScript({
         return;
       }
 
+      // Remove quaisquer widgets indevidos ancorados no editor de texto (.note-editor)
+      const strayWidgets = document.querySelectorAll<HTMLElement>(
+        '.note-editor .octablaster-floating-widget, .note-editing-area .octablaster-floating-widget',
+      );
+      strayWidgets.forEach((w) => w.remove());
+
       const containers = findTicketTabContainers(document);
 
       if (containers.length > 0) {
         for (const container of containers) {
           const targetDoc = container.ownerDocument || document;
-          const existingWidget = container.querySelector<HTMLElement>('.octablaster-floating-widget');
+          const widgetsInContainer = container.querySelectorAll<HTMLElement>('.octablaster-floating-widget');
+
+          // Se houver mais de um widget dentro do mesmo container, remove os excedentes
+          if (widgetsInContainer.length > 1) {
+            for (let i = 1; i < widgetsInContainer.length; i++) {
+              widgetsInContainer[i]?.remove();
+            }
+          }
+
+          const existingWidget = widgetsInContainer[0];
 
           if (existingWidget && existingWidget.isConnected) {
             updateLicenseButton(existingWidget, container);
@@ -845,28 +860,6 @@ export default defineContentScript({
             updateLicenseButton(newWidget, container);
           }
         }
-      } else {
-        // Fallback: se nenhuma barra de abas foi detectada, tenta ancorar no .note-editor
-        const targetEditor = findVisibleNoteEditable(document);
-        if (targetEditor) {
-          const mountAnchor =
-            (targetEditor.closest('.note-editor') as HTMLElement | null) || targetEditor.parentElement;
-          if (mountAnchor && mountAnchor.isConnected) {
-            const targetDoc = mountAnchor.ownerDocument || document;
-            const existingWidget = mountAnchor.querySelector<HTMLElement>('.octablaster-floating-widget');
-
-            if (existingWidget && existingWidget.isConnected) {
-              updateLicenseButton(existingWidget, mountAnchor);
-            } else {
-              mountAnchor.style.position = 'relative';
-              mountAnchor.style.overflow = 'visible';
-              ensureWidgetStyles(targetDoc);
-              const newWidget = createWidgetElement(targetDoc, mountAnchor);
-              mountAnchor.appendChild(newWidget);
-              updateLicenseButton(newWidget, mountAnchor);
-            }
-          }
-        }
       }
     }
 
@@ -880,7 +873,7 @@ export default defineContentScript({
     }
 
     function startWhenReady() {
-      console.log('[OctaBlaster v0.3.6] Aguardando estabilização do carregamento da página...');
+      console.log('[OctaBlaster v0.3.7] Aguardando estabilização do carregamento da página...');
       const start = () => {
         setTimeout(initWidgetLifecycle, 1200);
       };
