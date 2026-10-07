@@ -1,6 +1,6 @@
 # ⚡ OctaBlaster - Respostas Rápidas & Automação para Octadesk
 
-> **Versão**: `0.2.0`
+> **Versão**: `0.2.1`
 
 Extensão moderna para navegadores web construída com **WXT (Next-gen Web Extension Framework)**, **TypeScript** e **Vue 3**, com suporte nativo e ultra-otimizado para o **Firefox** (incluindo Painel Lateral / Sidebar) e Chromium (Chrome, Edge, Brave, Opera).
 
@@ -50,6 +50,10 @@ Projetada especificamente para equipes de atendimento e suporte que utilizam o *
 ### 5. 🛡️ Trava de Idempotência Anti-Duplicação
 - Previne colagens múltiplas acidentais causadas por múltiplos frames (`iframe.embedded__app_GUiYT`) ou cliques repetidos.
 
+### 6. 🐙 Identidade Visual Octadesk
+- Ícone oficial do Octadesk com cor `#ffc600` incorporado em todos os tamanhos (16px, 32px, 48px, 96px, 128px e SVG).
+- Aplicado diretamente no cabeçalho do popup, no widget flutuante da tela e no manifesto da extensão.
+
 ---
 
 ## 🛠️ Comandos de Desenvolvimento (`pnpm`)
@@ -59,18 +63,23 @@ Projetada especificamente para equipes de atendimento e suporte que utilizam o *
 pnpm install
 ```
 
-### 2. Rodar em desenvolvimento com o Firefox (Live Reload)
+### 2. Gerar / atualizar ícones PNG a partir do SVG
+```bash
+pnpm generate:icons
+```
+
+### 3. Rodar em desenvolvimento com o Firefox (Live Reload)
 Abre uma instância dedicada do Firefox com Hot Module Replacement (HMR):
 ```bash
 pnpm dev:firefox
 ```
 
-### 3. Verificar tipos TypeScript
+### 4. Verificar tipos TypeScript
 ```bash
 pnpm compile
 ```
 
-### 4. Gerar build de produção para Firefox
+### 5. Gerar build de produção para Firefox
 ```bash
 pnpm build:firefox
 ```

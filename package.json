@@ -2,7 +2,7 @@
   "name": "octa-blaster",
   "description": "Extensão para envio de respostas rápidas em tickets de helpdesk",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "scripts": {
     "dev": "wxt",
@@ -12,6 +12,7 @@
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
     "compile": "vue-tsc --noEmit",
+    "generate:icons": "node scripts/generate-icons.js",
     "postinstall": "wxt prepare"
   },
   "dependencies": {
@@ -19,6 +20,7 @@
   },
   "devDependencies": {
     "@wxt-dev/module-vue": "^1.0.3",
+    "sharp": "^0.35.5",
     "typescript": "^5.9.3",
     "vite": "^8.1.5",
     "vue-tsc": "^3.2.5",
