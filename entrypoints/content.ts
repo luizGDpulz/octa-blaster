@@ -4,7 +4,7 @@ import { automateLicenseMentions, switchToInternalNote } from '@/utils/mentionHe
 import type { InsertMessageRequest, InsertMessageResponse, QuickReplyTemplate } from '@/types/template';
 
 export default defineContentScript({
-  matches: ['*://*.octadesk.com/*', '<all_urls>'],
+  matches: ['https://app.octadesk.com/*'],
   allFrames: true,
   runAt: 'document_idle',
   main() {
@@ -224,12 +224,13 @@ export default defineContentScript({
       const host = window.location.hostname.toLowerCase();
       const href = getTopHrefSafe().toLowerCase();
 
-      const isOcta = host.includes('octadesk.com') || href.includes('octadesk.com') || host.includes('localhost');
-      if (!isOcta) return false;
+      // Limita estritamente ao host app.octadesk.com (ou localhost durante testes de dev)
+      const isTargetHost = host === 'app.octadesk.com' || href.includes('app.octadesk.com') || host === 'localhost';
+      if (!isTargetHost) return false;
 
-      // Verifica se está na parte de tickets
-      const isTicketsUrl = href.includes('/ticket') || href.includes('#/ticket') || href.includes('tickets');
-      return isTicketsUrl;
+      // Limita estritamente à rota de tickets: https://app.octadesk.com/ticket (ou #/ticket)
+      const isTicketRoute = href.includes('/ticket') || href.includes('#/ticket');
+      return isTicketRoute;
     }
 
     function findVisibleNoteEditable(doc: Document = document): HTMLElement | null {
@@ -285,16 +286,8 @@ export default defineContentScript({
       const isTickets = isOctadeskTicketsContext();
       const target = findVisibleNoteEditable();
 
-      // Só deve aparecer na url indicada, na parte de tickets E quando o campo .note-editable existir
-      if (!isTickets && !target) {
-        if (activeWidget) {
-          activeWidget.remove();
-          activeWidget = null;
-        }
-        return;
-      }
-
-      if (!target) {
+      // Só deve aparecer estritamente quando estiver na URL https://app.octadesk.com/ticket E com o campo .note-editable presente
+      if (!isTickets || !target) {
         if (activeWidget) {
           activeWidget.remove();
           activeWidget = null;
