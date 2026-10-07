@@ -1,6 +1,6 @@
 # 🐙 OctaBlaster - Respostas Rápidas & Automação para Octadesk
 
-> **Versão**: `0.2.8`
+> **Versão**: `0.2.9`
 
 Extensão moderna para navegadores web construída com **WXT (Next-gen Web Extension Framework)**, **TypeScript** e **Vue 3**, com suporte nativo e ultra-otimizado para o **Firefox** (incluindo Painel Lateral / Sidebar) e Chromium (Chrome, Edge, Brave, Opera).
 

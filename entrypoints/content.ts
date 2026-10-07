@@ -6,9 +6,10 @@ import type { InsertMessageRequest, InsertMessageResponse, QuickReplyTemplate } 
 export default defineContentScript({
   matches: ['*://app.octadesk.com/*', '*://*.octadesk.com/*'],
   allFrames: true,
+  matchAboutBlank: true,
   runAt: 'document_idle',
   main() {
-    console.log('[OctaBlaster v0.2.8] Content script inicializado no frame:', window.location.href);
+    console.log('[OctaBlaster v0.2.9] Content script inicializado no frame:', window.location.href);
     let lastActiveInput: HTMLElement | null = null;
     const processedRequests = new Set<string>();
 
@@ -215,29 +216,90 @@ export default defineContentScript({
     let isMinimized = false;
 
     function isOctadeskTicketsContext(): boolean {
-      const host = window.location.hostname.toLowerCase();
-      const href = window.location.href.toLowerCase();
+      try {
+        const host = window.location.hostname.toLowerCase();
+        const href = window.location.href.toLowerCase();
+        let topHref = '';
+        try {
+          topHref = window.top?.location?.href?.toLowerCase() || '';
+        } catch {}
 
-      // Valida se o domínio pertence ao Octadesk ou localhost
-      const isOctaHost = host.includes('octadesk.com') || host === 'localhost';
-      if (!isOctaHost) return false;
+        // Valida se o domínio pertence ao Octadesk ou localhost
+        const isOctaHost =
+          host.includes('octadesk.com') ||
+          host === 'localhost' ||
+          topHref.includes('octadesk.com');
+        if (!isOctaHost) return false;
 
-      // Valida se é uma rota de ticket
-      return href.includes('ticket');
+        // Valida se é uma rota de ticket
+        return href.includes('ticket') || topHref.includes('ticket');
+      } catch {
+        return false;
+      }
     }
 
-    function findVisibleNoteEditable(): HTMLElement | null {
-      try {
-        const editables = document.querySelectorAll<HTMLElement>('.note-editable');
-        for (const el of Array.from(editables)) {
-          const style = window.getComputedStyle(el);
-          if (style.display !== 'none' && style.visibility !== 'hidden') {
-            return el;
+    function findVisibleNoteEditable(rootDoc: Document = document): HTMLElement | null {
+      const allDocs: Document[] = [];
+
+      function collectDocs(d: Document | null | undefined) {
+        if (!d || allDocs.includes(d)) return;
+        allDocs.push(d);
+        try {
+          const iframes = d.querySelectorAll<HTMLIFrameElement>('iframe');
+          for (const ifr of Array.from(iframes)) {
+            try {
+              const childDoc = ifr.contentDocument || ifr.contentWindow?.document;
+              if (childDoc) collectDocs(childDoc);
+            } catch {}
           }
-        }
-      } catch (err) {
-        console.warn('[OctaBlaster] Erro ao buscar editor:', err);
+        } catch {}
       }
+
+      try {
+        if (window.top?.document) {
+          collectDocs(window.top.document);
+        }
+      } catch {}
+      collectDocs(rootDoc);
+
+      const selectors = [
+        '.note-editable',
+        '.note-editor [contenteditable="true"]',
+        '.note-editing-area [contenteditable="true"]',
+        '[contenteditable="true"][role="textbox"]',
+        '.note-editable[contenteditable="true"]',
+      ];
+
+      for (const d of allDocs) {
+        try {
+          for (const selector of selectors) {
+            const candidates = d.querySelectorAll<HTMLElement>(selector);
+            for (const el of Array.from(candidates)) {
+              const win = el.ownerDocument.defaultView || window;
+              const style = win.getComputedStyle(el);
+              if (style.display !== 'none' && style.visibility !== 'hidden') {
+                return el;
+              }
+            }
+          }
+        } catch {}
+      }
+
+      // Fallback: qualquer [contenteditable="true"] com tamanho visível
+      for (const d of allDocs) {
+        try {
+          const editables = d.querySelectorAll<HTMLElement>('[contenteditable="true"]');
+          for (const el of Array.from(editables)) {
+            const win = el.ownerDocument.defaultView || window;
+            const style = win.getComputedStyle(el);
+            const rect = el.getBoundingClientRect();
+            if (rect.height > 30 && style.display !== 'none' && style.visibility !== 'hidden') {
+              return el;
+            }
+          }
+        } catch {}
+      }
+
       return null;
     }
 
@@ -251,22 +313,27 @@ export default defineContentScript({
     }
 
     function updateWidgetLifecycle() {
-      // 1. Se o widget já está montado e conectado no DOM, só atualiza o botão de licença se necessário
-      if (activeWidget && activeWidget.isConnected) {
-        updateLicenseButton(activeWidget);
+      // 1. Só roda no contexto do Octadesk e em rotas de ticket
+      if (!isOctadeskTicketsContext()) {
+        if (activeWidget && activeWidget.isConnected) {
+          activeWidget.remove();
+        }
         return;
       }
 
-      // 2. Só roda no contexto do Octadesk e em rotas de ticket
-      if (!isOctadeskTicketsContext()) return;
-
-      // 3. Procura o campo de edição do ticket
-      const target = findVisibleNoteEditable();
+      // 2. Procura o campo de edição do ticket
+      const target = findVisibleNoteEditable(document);
       if (!target) return;
 
-      console.log('[OctaBlaster v0.2.8] Editor .note-editable encontrado! Montando barra...');
+      const targetDoc = target.ownerDocument || document;
 
-      ensureWidgetStyles(document);
+      // 3. Se já existe um widget montado neste documento, apenas atualiza
+      const existingWidget = targetDoc.getElementById('octablaster-inpage-widget');
+      if (existingWidget && existingWidget.isConnected) {
+        activeWidget = existingWidget;
+        updateLicenseButton(activeWidget, targetDoc);
+        return;
+      }
 
       // 4. Localiza o container do Summernote (.note-editor) ou o container pai
       const editorBox = target.closest('.note-editor') as HTMLElement | null;
@@ -275,8 +342,10 @@ export default defineContentScript({
 
       if (!mountParent) return;
 
-      if (!activeWidget) {
-        activeWidget = createWidgetElement();
+      ensureWidgetStyles(targetDoc);
+
+      if (!activeWidget || activeWidget.ownerDocument !== targetDoc) {
+        activeWidget = createWidgetElement(targetDoc);
       }
 
       // 5. Insere a barra no topo da área de edição
@@ -286,8 +355,9 @@ export default defineContentScript({
       mountParent.style.overflow = 'visible';
       if (editorBox) editorBox.style.overflow = 'visible';
 
-      updateLicenseButton(activeWidget);
-      console.log('[OctaBlaster v0.2.8] Barra de ações acoplada com sucesso!');
+      updateLicenseButton(activeWidget, targetDoc);
+      console.log(`[OctaBlaster v0.2.9] Editor detectado no documento (${targetDoc.location?.href || 'iframe'}):`, target);
+      console.log('[OctaBlaster v0.2.9] Barra acoplada montada com sucesso!');
     }
 
     function ensureWidgetStyles(doc: Document = document) {
@@ -471,8 +541,8 @@ export default defineContentScript({
       (doc.head || doc.documentElement).appendChild(style);
     }
 
-    function createWidgetElement(): HTMLElement {
-      const widget = document.createElement('div');
+    function createWidgetElement(doc: Document = document): HTMLElement {
+      const widget = doc.createElement('div');
       widget.id = 'octablaster-inpage-widget';
       widget.innerHTML = `
         <div class="octa-bar-container">
@@ -537,15 +607,16 @@ export default defineContentScript({
         btnLicense.textContent = '⏳ Marcando...';
         btnLicense.style.opacity = '0.7';
 
-        const target = findVisibleNoteEditable() || findBestEditableElement();
-        const res = await automateLicenseMentions(target, document);
+        const target = findVisibleNoteEditable(doc) || findBestEditableElement();
+        const targetDoc = target?.ownerDocument || doc;
+        const res = await automateLicenseMentions(target, targetDoc);
         if (res.success) {
           btnLicense.textContent = '✅ Marcados!';
         } else {
           btnLicense.textContent = '❌ Tente novamente';
         }
 
-        setTimeout(() => updateLicenseButton(widget), 2500);
+        setTimeout(() => updateLicenseButton(widget, targetDoc), 2500);
       });
 
       // Dropdown de respostas rápidas
@@ -571,7 +642,7 @@ export default defineContentScript({
 
           dropdownList.innerHTML = '';
           templates.forEach((tpl) => {
-            const itemBtn = document.createElement('button');
+            const itemBtn = doc.createElement('button');
             itemBtn.className = 'octa-dropdown-item';
             itemBtn.innerHTML = `
               <span class="octa-item-title">${tpl.title}</span>
@@ -579,7 +650,7 @@ export default defineContentScript({
             `;
 
             itemBtn.addEventListener('click', () => {
-              const target = findVisibleNoteEditable() || findBestEditableElement();
+              const target = findVisibleNoteEditable(doc) || findBestEditableElement();
               if (target) {
                 // Resolve variável {{Saudacao}}
                 const hour = new Date().getHours();
@@ -605,18 +676,25 @@ export default defineContentScript({
       });
 
       // Fecha dropdown ao clicar fora
-      document.addEventListener('click', () => {
+      doc.addEventListener('click', () => {
         dropdownMenu.style.display = 'none';
       });
+      if (window.top?.document && window.top.document !== doc) {
+        try {
+          window.top.document.addEventListener('click', () => {
+            dropdownMenu.style.display = 'none';
+          });
+        } catch {}
+      }
 
       return widget;
     }
 
-    function updateLicenseButton(widget: HTMLElement) {
+    function updateLicenseButton(widget: HTMLElement, doc: Document = document) {
       const btnLicense = widget.querySelector('#octa-btn-license') as HTMLElement | null;
       if (!btnLicense) return;
 
-      const info = detectLicenseTicket(document);
+      const info = detectLicenseTicket(doc);
       if (info && info.isLicenseTicket) {
         const typeLabel = info.type !== 'Outro' ? info.type : 'Licença';
         const newText = `🏷️ Marcar (${typeLabel})`;

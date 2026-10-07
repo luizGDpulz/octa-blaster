@@ -14,15 +14,26 @@ export interface LicenseTicketInfo {
  */
 export function detectLicenseTicket(doc: Document = document): LicenseTicketInfo | null {
   try {
-    const allDocs: Document[] = [doc];
-    const iframes = doc.querySelectorAll<HTMLIFrameElement>('iframe');
-    iframes.forEach((ifr) => {
-      try {
-        if (ifr.contentDocument) allDocs.push(ifr.contentDocument);
-      } catch {
-        // Cross-origin iframe
+    const allDocs: Document[] = [];
+    function addDoc(d: Document | null | undefined) {
+      if (d && !allDocs.includes(d)) {
+        allDocs.push(d);
+        try {
+          const iframes = d.querySelectorAll<HTMLIFrameElement>('iframe');
+          for (const ifr of Array.from(iframes)) {
+            try {
+              const childDoc = ifr.contentDocument || ifr.contentWindow?.document;
+              if (childDoc) addDoc(childDoc);
+            } catch {}
+          }
+        } catch {}
       }
-    });
+    }
+
+    try {
+      if (window.top?.document) addDoc(window.top.document);
+    } catch {}
+    addDoc(doc);
 
     let detectedTitle = '';
     let detectedBody = '';

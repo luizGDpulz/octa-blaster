@@ -4,33 +4,63 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function getAllDocuments(rootDoc: Document = document): Document[] {
+  const allDocs: Document[] = [];
+  function add(d: Document | null | undefined) {
+    if (d && !allDocs.includes(d)) {
+      allDocs.push(d);
+      try {
+        const iframes = d.querySelectorAll<HTMLIFrameElement>('iframe');
+        for (const ifr of Array.from(iframes)) {
+          try {
+            const childDoc = ifr.contentDocument || ifr.contentWindow?.document;
+            if (childDoc) add(childDoc);
+          } catch {}
+        }
+      } catch {}
+    }
+  }
+
+  try {
+    if (window.top?.document) {
+      add(window.top.document);
+    }
+  } catch {}
+  add(rootDoc);
+  return allDocs;
+}
+
 /**
  * Verifica se a aba "Anotação interna" já está ativa no Octadesk.
  */
 export function isInternalNoteTabActive(doc: Document = document): boolean {
-  // 1. Verifica no li específico do Octadesk com a classe active/yellow
-  const activeInternalLi = doc.querySelector<HTMLElement>(
-    'li.active[ng-class*="commentTypeSelected === 3"], li.active.yellow[comment-type-selected="vm.commentTypeSelected"]',
-  );
-  if (activeInternalLi) return true;
+  const allDocs = getAllDocuments(doc);
 
-  // 2. Verifica se a aba ativa na barra de comentários contém texto "Anotação interna"
-  const activeTabs = doc.querySelectorAll<HTMLElement>(
-    '.nav-comments li.active, .subarea-tabs li.active',
-  );
-  for (const tab of Array.from(activeTabs)) {
-    const text = (tab.textContent || '').toLowerCase();
-    if (text.includes('anotação') || text.includes('anotacao')) {
+  for (const d of allDocs) {
+    // 1. Verifica no li específico do Octadesk com a classe active/yellow
+    const activeInternalLi = d.querySelector<HTMLElement>(
+      'li.active[ng-class*="commentTypeSelected === 3"], li.active.yellow[comment-type-selected="vm.commentTypeSelected"]',
+    );
+    if (activeInternalLi) return true;
+
+    // 2. Verifica se a aba ativa na barra de comentários contém texto "Anotação interna"
+    const activeTabs = d.querySelectorAll<HTMLElement>(
+      '.nav-comments li.active, .subarea-tabs li.active',
+    );
+    for (const tab of Array.from(activeTabs)) {
+      const text = (tab.textContent || '').toLowerCase();
+      if (text.includes('anotação') || text.includes('anotacao')) {
+        return true;
+      }
+    }
+
+    // 3. Verifica se a partial de internal comment está presente e ativa
+    const internalCommentScope = d.querySelector<HTMLElement>(
+      'div[ng-if*="typeInteractionSelected == 3"], div[ng-include*="comments/internal.html"]',
+    );
+    if (internalCommentScope && internalCommentScope.offsetParent !== null) {
       return true;
     }
-  }
-
-  // 3. Verifica se a partial de internal comment está presente e ativa
-  const internalCommentScope = doc.querySelector<HTMLElement>(
-    'div[ng-if*="typeInteractionSelected == 3"], div[ng-include*="comments/internal.html"]',
-  );
-  if (internalCommentScope && internalCommentScope.offsetParent !== null) {
-    return true;
   }
 
   return false;
@@ -44,13 +74,7 @@ export function isInternalNoteTabActive(doc: Document = document): boolean {
  * </li>
  */
 export async function switchToInternalNote(doc: Document = document): Promise<boolean> {
-  const allDocs = [doc];
-  const iframes = doc.querySelectorAll<HTMLIFrameElement>('iframe');
-  iframes.forEach((ifr) => {
-    try {
-      if (ifr.contentDocument) allDocs.push(ifr.contentDocument);
-    } catch {}
-  });
+  const allDocs = getAllDocuments(doc);
 
   for (const d of allDocs) {
     if (isInternalNoteTabActive(d)) {
@@ -103,13 +127,7 @@ export async function waitForInternalNoteEditor(
   const startTime = Date.now();
 
   while (Date.now() - startTime < maxWaitMs) {
-    const allDocs = [doc];
-    const iframes = doc.querySelectorAll<HTMLIFrameElement>('iframe');
-    iframes.forEach((ifr) => {
-      try {
-        if (ifr.contentDocument) allDocs.push(ifr.contentDocument);
-      } catch {}
-    });
+    const allDocs = getAllDocuments(doc);
 
     for (const d of allDocs) {
       const isInternal = isInternalNoteTabActive(d);
@@ -150,13 +168,7 @@ async function selectPersonFromPopover(
   const startTime = Date.now();
 
   while (Date.now() - startTime < maxWaitMs) {
-    const allDocs = [doc];
-    const iframes = doc.querySelectorAll<HTMLIFrameElement>('iframe');
-    iframes.forEach((ifr) => {
-      try {
-        if (ifr.contentDocument) allDocs.push(ifr.contentDocument);
-      } catch {}
-    });
+    const allDocs = getAllDocuments(doc);
 
     for (const d of allDocs) {
       // Busca pelo popover e itens de sugestão (.popover-content.note-children-container)
@@ -197,17 +209,18 @@ export async function automateLicenseMentions(
   doc: Document = document,
 ): Promise<{ success: boolean; message: string }> {
   try {
+    const targetDoc = editor?.ownerDocument || doc;
     let targetEditor = editor;
 
     // Passo 1: Garantir que está na aba de Anotação Interna
-    const isAlreadyInternal = isInternalNoteTabActive(doc);
+    const isAlreadyInternal = isInternalNoteTabActive(targetDoc);
     if (!isAlreadyInternal) {
       console.log('[OctaBlaster] Resposta pública detectada. Alternando para Anotação interna...');
-      await switchToInternalNote(doc);
+      await switchToInternalNote(targetDoc);
       // Aguarda o Angular renderizar o novo editor Summernote da Anotação interna
-      targetEditor = await waitForInternalNoteEditor(doc, 4000);
+      targetEditor = await waitForInternalNoteEditor(targetDoc, 4000);
     } else if (!targetEditor) {
-      targetEditor = await waitForInternalNoteEditor(doc, 2000);
+      targetEditor = await waitForInternalNoteEditor(targetDoc, 2000);
     }
 
     if (!targetEditor) {
@@ -230,7 +243,7 @@ export async function automateLicenseMentions(
     targetEditor.dispatchEvent(new KeyboardEvent('keyup', { key: 'e', code: 'KeyE', bubbles: true }));
 
     // Aguarda o popover e seleciona Jorge Tigre
-    const selectedJorge = await selectPersonFromPopover(/jorge\s+tigre/i, doc, 3500);
+    const selectedJorge = await selectPersonFromPopover(/jorge\s+tigre/i, targetDoc, 3500);
 
     if (!selectedJorge) {
       // Se não abriu o popover ou demorou, tenta com enter
@@ -248,7 +261,7 @@ export async function automateLicenseMentions(
     targetEditor.dispatchEvent(new KeyboardEvent('keyup', { key: 'o', code: 'KeyO', bubbles: true }));
 
     // Aguarda o popover e seleciona Roberto Renck
-    const selectedRoberto = await selectPersonFromPopover(/roberto\s+renck/i, doc, 3500);
+    const selectedRoberto = await selectPersonFromPopover(/roberto\s+renck/i, targetDoc, 3500);
 
     if (!selectedRoberto) {
       targetEditor.dispatchEvent(
