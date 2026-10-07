@@ -1,6 +1,6 @@
 # ⚡ OctaBlaster - Extensão de Respostas Rápidas para Helpdesk
 
-> **Versão**: `v0.1.0-beta.1` (Fase Beta)
+> **Versão**: `v0.1.0-beta.2` (Fase Beta)
 
 Extensão moderna para navegadores web construída com **WXT (Next-gen Web Extension Framework)**, **TypeScript** e **Vue 3**, com suporte nativo e ultra-otimizado para o **Firefox** (Manifest V2 e V3) e Chromium (Chrome, Edge, Brave, Opera).
 

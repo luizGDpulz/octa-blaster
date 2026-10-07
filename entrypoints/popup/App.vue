@@ -2,29 +2,36 @@
 import { ref, computed, onMounted } from 'vue';
 import type { QuickReplyTemplate, InsertMessageResponse } from '@/types/template';
 
-const STORAGE_KEY = 'octablaster_quick_replies';
-const HAS_INITIALIZED_KEY = 'octablaster_initialized';
+const STORAGE_KEY = 'octablaster_quick_replies_v2';
+const HAS_INITIALIZED_KEY = 'octablaster_initialized_v2';
 
 const DEFAULT_TEMPLATES: QuickReplyTemplate[] = [
   {
-    id: 'default-1',
-    title: '👋 Saudação Inicial',
-    content: '{saudacao}! Tudo bem?\nRecebemos a sua solicitação e já estamos analisando o caso.\nEm breve entraremos em contato com mais detalhes.',
+    id: 'inatividade-2-4',
+    title: '⏳ Cobrança de Retorno (2º e 4º dia)',
+    content: '{{Saudacao}}\n\nAlgum retorno sobre este ticket? Caso contrário o mesmo será encerrado.',
+    category: 'Inatividade',
+    updatedAt: Date.now(),
+  },
+  {
+    id: 'inatividade-6',
+    title: '🛑 Encerramento por Falta de Retorno (6º dia)',
+    content: '{{Saudacao}}\n\nNão recebemos retorno do último e-mail enviado e não havendo mais interações neste canal de atendimento, estaremos marcando este ticket como resolvido. Caso tenha alguma novidade sobre o assunto, basta responder este e-mail que reabriremos o caso.',
+    category: 'Inatividade',
+    updatedAt: Date.now(),
+  },
+  {
+    id: 'saudacao-geral',
+    title: '👋 Saudação e Em Análise',
+    content: '{{Saudacao}} Tudo bem?\n\nRecebemos sua solicitação e já estamos analisando o caso.\nEm breve entraremos em contato com mais detalhes.',
     category: 'Geral',
     updatedAt: Date.now(),
   },
   {
-    id: 'default-2',
+    id: 'solicitacao-prints',
     title: '📸 Solicitação de Prints / Evidências',
-    content: '{saudacao}! Para que possamos prosseguir com o diagnóstico, poderia nos enviar:\n1. Print ou gravação da tela com a mensagem de erro;\n2. O passo a passo exato para reproduzir o problema;\n3. O horário aproximado em que ocorreu.\n\nFicamos no aguardo para dar continuidade!',
+    content: '{{Saudacao}}\n\nPara que possamos prosseguir com o diagnóstico, poderia nos enviar:\n1. Print ou gravação da tela com a mensagem de erro;\n2. O passo a passo exato para reproduzir o problema;\n3. O horário aproximado em que ocorreu.\n\nFicamos no aguardo!',
     category: 'Suporte',
-    updatedAt: Date.now(),
-  },
-  {
-    id: 'default-3',
-    title: '✅ Chamado Concluído / Resolução',
-    content: '{saudacao}! Informamos que a tratativa foi finalizada com sucesso.\nPor favor, faça um novo teste no sistema e nos confirme se tudo está funcionando como esperado.\n\nQualquer dúvida adicional, permanecemos à total disposição!',
-    category: 'Finalização',
     updatedAt: Date.now(),
   },
 ];
@@ -38,6 +45,7 @@ const formTitle = ref('');
 const formCategory = ref('');
 const formContent = ref('');
 
+const isSending = ref(false);
 const statusType = ref<'success' | 'error' | 'info'>('info');
 const statusMessage = ref('');
 let statusTimeout: number | undefined;
@@ -51,26 +59,36 @@ function setStatus(msg: string, type: 'success' | 'error' | 'info' = 'info') {
   }, 3500);
 }
 
-// Substitui variáveis dinâmicas inteligentes como {saudacao}, {data}, {hora}
-function resolveVariables(text: string): string {
-  const now = new Date();
-  const hour = now.getHours();
-  let greeting = 'Olá';
+// Retorna "Bom dia", "Boa tarde" ou "Boa noite" com base no horário
+function getGreeting(): string {
+  const hour = new Date().getHours();
   if (hour >= 5 && hour < 12) {
-    greeting = 'Bom dia';
+    return 'Bom dia';
   } else if (hour >= 12 && hour < 18) {
-    greeting = 'Boa tarde';
+    return 'Boa tarde';
   } else {
-    greeting = 'Boa noite';
+    return 'Boa noite';
   }
+}
 
+// Substitui tags dinâmicas como {{Saudacao}}, {{Data}}, {{Hora}}
+function resolveVariables(text: string): string {
+  const greeting = getGreeting();
+  const now = new Date();
   const dateStr = now.toLocaleDateString('pt-BR');
   const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
   return text
-    .replace(/\{saudacao\}/gi, greeting)
-    .replace(/\{data\}/gi, dateStr)
-    .replace(/\{hora\}/gi, timeStr);
+    // Trata {{Saudacao}}! ou {Saudacao}! -> "Bom dia!" / "Boa tarde!" sem duplicar exclamação
+    .replace(/(?:\{\{|\{)\s*sauda[cç][aã]o\s*(?:\}\}|\})!+/gi, `${greeting}!`)
+    // Trata {{Saudacao}}, ou {Saudacao}, -> "Bom dia," / "Boa tarde,"
+    .replace(/(?:\{\{|\{)\s*sauda[cç][aã]o\s*(?:\}\}|\}),/gi, `${greeting},`)
+    // Trata {{Saudacao}} ou {Saudacao} avulso -> "Bom dia!" / "Boa tarde!"
+    .replace(/(?:\{\{|\{)\s*sauda[cç][aã]o\s*(?:\}\}|\})/gi, `${greeting}!`)
+    // Trata {{Data}} ou {Data}
+    .replace(/(?:\{\{|\{)\s*data\s*(?:\}\}|\})/gi, dateStr)
+    // Trata {{Hora}} ou {Hora}
+    .replace(/(?:\{\{|\{)\s*hora\s*(?:\}\}|\})/gi, timeStr);
 }
 
 async function loadTemplates() {
@@ -101,6 +119,12 @@ async function saveTemplates() {
     console.error('Erro ao persistir modelos:', err);
     setStatus('Erro ao salvar no armazenamento', 'error');
   }
+}
+
+async function resetToDefaults() {
+  templates.value = [...DEFAULT_TEMPLATES];
+  await saveTemplates();
+  setStatus('Modelos padrão de inatividade restaurados!', 'success');
 }
 
 function startCreate() {
@@ -170,7 +194,11 @@ async function removeTemplate(id: string) {
 }
 
 async function insertIntoTicket(template: QuickReplyTemplate) {
+  if (isSending.value) return;
+  isSending.value = true;
+
   const processedContent = resolveVariables(template.content);
+  const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
   try {
     const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
@@ -181,6 +209,7 @@ async function insertIntoTicket(template: QuickReplyTemplate) {
 
     const res = (await browser.tabs.sendMessage(tab.id, {
       action: 'INSERT_REPLY',
+      requestId,
       content: processedContent,
     })) as InsertMessageResponse | undefined;
 
@@ -192,6 +221,10 @@ async function insertIntoTicket(template: QuickReplyTemplate) {
   } catch (error) {
     console.error('Falha de comunicação com a aba:', error);
     setStatus('Recarregue a página do ticket e tente novamente.', 'error');
+  } finally {
+    setTimeout(() => {
+      isSending.value = false;
+    }, 600);
   }
 }
 
@@ -263,7 +296,7 @@ onMounted(() => {
         <input
           v-model="formTitle"
           type="text"
-          placeholder="Ex: Saudação Padrão, Solicitação de Logs"
+          placeholder="Ex: Cobrança de Retorno (2º e 4º dia)"
           maxlength="60"
         />
       </div>
@@ -273,7 +306,7 @@ onMounted(() => {
         <input
           v-model="formCategory"
           type="text"
-          placeholder="Ex: Geral, Suporte N2, Cobrança"
+          placeholder="Ex: Inatividade, Suporte, Geral"
           maxlength="30"
         />
       </div>
@@ -283,21 +316,39 @@ onMounted(() => {
           <label>Mensagem da Resposta</label>
           <div class="quick-tags">
             <span class="tag-hint">Inserir tag:</span>
-            <button type="button" class="tag-btn" @click="insertVariable('{saudacao}')" title="Bom dia / Boa tarde / Boa noite automático">
-              {saudacao}
+            <button
+              type="button"
+              class="tag-btn tag-btn-highlight"
+              v-pre
+              @click="insertVariable('{{Saudacao}}')"
+              title="Alterna automaticamente entre 'Bom dia!' ou 'Boa tarde!' conforme o horário"
+            >
+              {{Saudacao}}
             </button>
-            <button type="button" class="tag-btn" @click="insertVariable('{data}')" title="Data atual">
-              {data}
+            <button
+              type="button"
+              class="tag-btn"
+              v-pre
+              @click="insertVariable('{{Data}}')"
+              title="Data atual formatada"
+            >
+              {{Data}}
             </button>
-            <button type="button" class="tag-btn" @click="insertVariable('{hora}')" title="Hora atual">
-              {hora}
+            <button
+              type="button"
+              class="tag-btn"
+              v-pre
+              @click="insertVariable('{{Hora}}')"
+              title="Hora atual formatada"
+            >
+              {{Hora}}
             </button>
           </div>
         </div>
         <textarea
           v-model="formContent"
           rows="6"
-          placeholder="Escreva a resposta pronta aqui..."
+          placeholder="Escreva a resposta pronta aqui... Use {{Saudacao}} para Bom dia / Boa tarde automático!"
         ></textarea>
       </div>
 
@@ -325,7 +376,7 @@ onMounted(() => {
       <div class="templates-scroll">
         <div v-if="filteredTemplates.length === 0" class="empty-state">
           <p v-if="searchQuery">Nenhum modelo encontrado para "{{ searchQuery }}".</p>
-          <p v-else>Nenhum modelo cadastrado ainda. Clique em "+ Novo" para adicionar!</p>
+          <p v-else>Nenhum modelo cadastrado. Clique em "+ Novo" ou "Restaurar Padrões".</p>
         </div>
 
         <div
@@ -356,10 +407,11 @@ onMounted(() => {
             </button>
             <button
               class="btn-action btn-send"
+              :disabled="isSending"
               title="Inserir diretamente no ticket em foco"
               @click="insertIntoTicket(tpl)"
             >
-              🚀 Inserir no Ticket
+              {{ isSending ? '⏳ Inserindo...' : '🚀 Inserir no Ticket' }}
             </button>
           </div>
         </div>
@@ -368,7 +420,12 @@ onMounted(() => {
 
     <!-- Rodapé -->
     <footer class="footer">
-      <span>Dica: Clique no campo do ticket antes de disparar.</span>
+      <div class="footer-hint">
+        Use <code v-pre>{{Saudacao}}</code> para alternar Bom dia / Boa tarde!
+      </div>
+      <button class="btn-restore" title="Restaurar modelos padrão" @click="resetToDefaults">
+        🔄 Padrões
+      </button>
     </footer>
   </div>
 </template>
@@ -532,12 +589,24 @@ onMounted(() => {
   color: #334155;
   border-radius: 4px;
   font-size: 10px;
-  padding: 2px 5px;
+  padding: 2px 6px;
   cursor: pointer;
+  font-weight: 500;
 }
 
 .tag-btn:hover {
   background: #cbd5e1;
+}
+
+.tag-btn-highlight {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.tag-btn-highlight:hover {
+  background: #bfdbfe;
 }
 
 input[type="text"],
@@ -729,13 +798,18 @@ textarea {
   transition: background 0.15s, border-color 0.15s;
 }
 
+.btn-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .btn-copy {
   background: #f8fafc;
   color: #334155;
   border: 1px solid #cbd5e1;
 }
 
-.btn-copy:hover {
+.btn-copy:hover:not(:disabled) {
   background: #e2e8f0;
 }
 
@@ -745,17 +819,42 @@ textarea {
   border: 1px solid #1d4ed8;
 }
 
-.btn-send:hover {
+.btn-send:hover:not(:disabled) {
   background: #1d4ed8;
 }
 
 .footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 8px 14px;
   background: var(--bg-secondary);
   border-top: 1px solid var(--border);
   font-size: 11px;
   color: var(--text-muted);
-  text-align: center;
+}
+
+.footer-hint code {
+  background: #e2e8f0;
+  color: #1e293b;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 10px;
+}
+
+.btn-restore {
+  background: transparent;
+  border: none;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.btn-restore:hover {
+  text-decoration: underline;
 }
 
 .fade-enter-active,
