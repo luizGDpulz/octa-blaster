@@ -9,7 +9,7 @@ export default defineContentScript({
   matchAboutBlank: true,
   runAt: 'document_idle',
   main() {
-    console.log('[OctaBlaster v0.3.1] Content script inicializado no frame:', window.location.href);
+    console.log('[OctaBlaster v0.3.2] Content script inicializado no frame:', window.location.href);
     let lastActiveInput: HTMLElement | null = null;
     const processedRequests = new Set<string>();
 
@@ -314,6 +314,57 @@ export default defineContentScript({
       return null;
     }
 
+    function findTabsContainer(rootDoc: Document = document): HTMLElement | null {
+      const allDocs: Document[] = [];
+
+      function collectDocs(d: Document | null | undefined) {
+        if (!d || allDocs.includes(d)) return;
+        allDocs.push(d);
+        try {
+          const iframes = d.querySelectorAll<HTMLIFrameElement>('iframe');
+          for (const ifr of Array.from(iframes)) {
+            try {
+              const childDoc = ifr.contentDocument || ifr.contentWindow?.document;
+              if (childDoc) collectDocs(childDoc);
+            } catch {}
+          }
+        } catch {}
+      }
+
+      try {
+        if (window.top?.document) {
+          collectDocs(window.top.document);
+        }
+      } catch {}
+      collectDocs(rootDoc);
+
+      const selectors = [
+        'div.space-x-md[comment-type-selected]',
+        'div.space-x-md[ticket]',
+        'div.space-x-md',
+        'nav.subarea-tabs',
+        '.subarea-tabs',
+        'ul.nav-comments',
+      ];
+
+      for (const d of allDocs) {
+        try {
+          for (const selector of selectors) {
+            const el = d.querySelector<HTMLElement>(selector);
+            if (el) {
+              const win = el.ownerDocument.defaultView || window;
+              const style = win.getComputedStyle(el);
+              if (style.display !== 'none' && style.visibility !== 'hidden') {
+                return el;
+              }
+            }
+          }
+        } catch {}
+      }
+
+      return null;
+    }
+
     function initWidgetLifecycle() {
       updateWidgetLifecycle();
       window.setInterval(updateWidgetLifecycle, 800);
@@ -323,7 +374,7 @@ export default defineContentScript({
     }
 
     function startWhenReady() {
-      console.log('[OctaBlaster v0.3.0] Aguardando estabilização do carregamento da página...');
+      console.log('[OctaBlaster v0.3.2] Aguardando estabilização do carregamento da página...');
       const start = () => {
         // Aguarda 1.2s para garantir que AngularJS/SPA finalizou a renderização inicial
         setTimeout(initWidgetLifecycle, 1200);
@@ -347,11 +398,20 @@ export default defineContentScript({
         return;
       }
 
-      // 2. Procura o campo de edição do ticket com dimensões reais
-      const target = findVisibleNoteEditable(document);
-      if (!target) return;
+      // 2. Prioriza a ancoragem na barra de abas externa (.space-x-md / .subarea-tabs)
+      //    Isso garante que o botão não dependa do tamanho do campo de texto e não seja recortado por overflow
+      const tabsBar = findTabsContainer(document);
+      const targetEditor = findVisibleNoteEditable(document);
 
-      const targetDoc = target.ownerDocument || document;
+      const mountAnchor =
+        tabsBar ||
+        (targetEditor
+          ? (targetEditor.closest('.note-editor') as HTMLElement | null) || targetEditor.parentElement
+          : null);
+
+      if (!mountAnchor) return;
+
+      const targetDoc = mountAnchor.ownerDocument || document;
 
       // 3. Se já existe um widget montado neste documento, apenas atualiza
       const existingWidget = targetDoc.getElementById('octablaster-floating-widget');
@@ -361,18 +421,17 @@ export default defineContentScript({
         return;
       }
 
-      // 4. Localiza o contêiner do Summernote para ancorar o botão flutuante
-      const editorBox = target.closest('.note-editor') as HTMLElement | null;
-      const editingArea = (editorBox?.querySelector('.note-editing-area') as HTMLElement | null) || target.parentElement;
-      const anchorParent = editingArea || editorBox || target.parentElement;
-
-      if (!anchorParent) return;
-
-      // Assegura que o contêiner suporte position: absolute
-      const win = anchorParent.ownerDocument.defaultView || window;
-      const compPos = win.getComputedStyle(anchorParent).position;
+      // 4. Assegura que o contêiner suporte position: absolute e não corte o dropdown
+      const win = targetDoc.defaultView || window;
+      const compPos = win.getComputedStyle(mountAnchor).position;
       if (compPos === 'static') {
-        anchorParent.style.position = 'relative';
+        mountAnchor.style.position = 'relative';
+      }
+      mountAnchor.style.overflow = 'visible';
+
+      const parentBox = mountAnchor.closest('.box, .box-white, .box-bordered') as HTMLElement | null;
+      if (parentBox) {
+        parentBox.style.overflow = 'visible';
       }
 
       ensureWidgetStyles(targetDoc);
@@ -381,14 +440,13 @@ export default defineContentScript({
         activeWidget = createWidgetElement(targetDoc);
       }
 
-      // 5. Anexa o botão flutuante no canto superior direito do contêiner (não invade layout)
-      if (!anchorParent.contains(activeWidget)) {
-        anchorParent.appendChild(activeWidget);
+      // 5. Anexa o botão flutuante na barra de abas externa
+      if (!mountAnchor.contains(activeWidget)) {
+        mountAnchor.appendChild(activeWidget);
       }
 
       updateLicenseButton(activeWidget, targetDoc);
-      console.log(`[OctaBlaster v0.3.1] Editor detectado no documento (${targetDoc.location?.href || 'iframe'}):`, target);
-      console.log('[OctaBlaster v0.3.1] Botão flutuante acoplado com sucesso!');
+      console.log(`[OctaBlaster v0.3.2] Widget ancorado na barra de abas externa (${targetDoc.location?.href || 'iframe'}):`, mountAnchor);
     }
 
     function ensureWidgetStyles(doc: Document = document) {
@@ -400,8 +458,8 @@ export default defineContentScript({
       style.textContent = `
         #octablaster-floating-widget {
           position: absolute !important;
-          top: 8px !important;
-          right: 12px !important;
+          top: 4px !important;
+          right: 8px !important;
           z-index: 1050 !important;
           display: flex !important;
           align-items: center !important;
