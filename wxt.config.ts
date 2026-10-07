@@ -6,7 +6,7 @@ export default defineConfig({
   manifest: {
     name: 'OctaBlaster - Respostas Rápidas Octadesk',
     description: 'Respostas prontas automatizadas, injeção rápida de texto e automação de licenças para tickets no Octadesk',
-    version: '0.3.3',
+    version: '0.3.4',
     permissions: ['storage', 'activeTab'],
     host_permissions: ['*://app.octadesk.com/*', '*://*.octadesk.com/*'],
     browser_specific_settings: {

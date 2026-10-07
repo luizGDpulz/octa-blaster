@@ -53,96 +53,80 @@ export function detectLicenseTicket(scope: Document | HTMLElement = document): L
     let detectedTitle = '';
     let detectedBody = '';
 
-    if (scope instanceof HTMLElement) {
-      // Escopo estrito no contêiner do ticket atual
-      const ticketContainer = getScopedTicketContainer(scope);
+    const targetDoc: Document = scope instanceof HTMLElement ? scope.ownerDocument : scope;
+    const docTitle = targetDoc.title || '';
 
-      // 1. Busca títulos EXCLUSIVAMENTE dentro deste ticket
-      const titleCandidates = ticketContainer.querySelectorAll<HTMLElement>(
-        'h1, h2, h3, h4, [data-cy="ticket_title"], .ticket-subject, .ticket-title, .title-wrapper, [class*="ticket-title"]',
-      );
+    // 1. Verifica se o título do documento deste ticket já identifica o chamado de licença
+    if (/licen[cç]a/i.test(docTitle) && /(contrata[cç][aã]o|troca|cancelamento)/i.test(docTitle)) {
+      detectedTitle = docTitle;
+    }
 
+    const targetScope: HTMLElement | Document =
+      scope instanceof HTMLElement
+        ? getScopedTicketContainer(scope) || targetDoc.body || targetDoc
+        : targetDoc;
+
+    // 2. Busca títulos e assuntos nos elementos do ticket
+    const titleCandidates = targetScope.querySelectorAll<HTMLElement>(
+      'h1, h2, h3, h4, h5, [data-cy*="title"], [data-cy*="subject"], [data-cy*="summary"], [class*="title"], [class*="subject"], [class*="summary"], input[type="text"], .ticket-subject, .ticket-title, .title-wrapper',
+    );
+
+    for (const el of Array.from(titleCandidates)) {
+      const text = el.textContent?.trim() || '';
+      if (/licen[cç]a/i.test(text) && /(contrata[cç][aã]o|troca|cancelamento)/i.test(text)) {
+        detectedTitle = text;
+        break;
+      }
+    }
+
+    if (!detectedTitle) {
       for (const el of Array.from(titleCandidates)) {
         const text = el.textContent?.trim() || '';
-        if (/licen[cç]a/i.test(text) && /(contrata[cç][aã]o|troca|cancelamento)/i.test(text)) {
-          detectedTitle = text;
-          break;
-        }
-      }
-
-      if (!detectedTitle) {
-        for (const el of Array.from(titleCandidates)) {
-          const text = el.textContent?.trim() || '';
-          if (/licen[cç]a/i.test(text)) {
-            detectedTitle = text;
-            break;
-          }
-        }
-      }
-
-      // 2. Busca corpo/descrição EXCLUSIVAMENTE dentro deste ticket
-      const bodyElements = ticketContainer.querySelectorAll<HTMLElement>(
-        '.interaction-description, .ticket-description, .message-content, .interaction-card, [class*="interaction"], [class*="description"], p, pre',
-      );
-
-      for (const el of Array.from(bodyElements)) {
-        const text = el.textContent || '';
         if (/licen[cç]a/i.test(text)) {
-          if (
-            text.includes('Nome da Revenda') ||
-            text.includes('Número do Banco de Dados') ||
-            text.includes('Número de Licenças')
-          ) {
-            detectedBody = text;
-            break;
-          }
-          if (!detectedBody && /(contrata[cç][aã]o|troca|cancelamento)/i.test(text)) {
-            detectedBody = text;
-          }
-        }
-      }
-    } else {
-      // Se chamado com Document, tenta primeiro encontrar o contêiner de abas do ticket ativo
-      const activeTabs = scope.querySelector<HTMLElement>(
-        'div.space-x-md[comment-type-selected], div.space-x-md[ticket], nav.subarea-tabs, .subarea-tabs',
-      );
-      if (activeTabs) {
-        return detectLicenseTicket(activeTabs);
-      }
-
-      // Fallback para varredura do documento
-      const titleCandidates = scope.querySelectorAll<HTMLElement>(
-        'h1, h2, h3, h4, [data-cy="ticket_title"], .ticket-subject, .ticket-title, .title-wrapper, [class*="ticket-title"]',
-      );
-
-      for (const el of Array.from(titleCandidates)) {
-        const text = el.textContent?.trim() || '';
-        if (/licen[cç]a/i.test(text) && /(contrata[cç][aã]o|troca|cancelamento)/i.test(text)) {
           detectedTitle = text;
           break;
         }
       }
+    }
 
-      if (!detectedTitle && /licen[cç]a/i.test(scope.title)) {
-        detectedTitle = scope.title;
-      }
+    // Se ainda não achou título mas docTitle contém 'licença'
+    if (!detectedTitle && /licen[cç]a/i.test(docTitle)) {
+      detectedTitle = docTitle;
+    }
 
-      const bodyElements = scope.querySelectorAll<HTMLElement>(
-        '.interaction-description, .ticket-description, .message-content, .interaction-card, p, pre',
-      );
+    // 3. Busca corpo/descrição no ticket
+    const bodyElements = targetScope.querySelectorAll<HTMLElement>(
+      '.interaction-description, .ticket-description, .message-content, .interaction-card, [class*="interaction"], [class*="description"], [class*="message"], [class*="content"], [class*="comment"], [class*="card"], p, pre, td, tr, table, div',
+    );
 
-      for (const el of Array.from(bodyElements)) {
-        const text = el.textContent || '';
-        if (text.includes('LICENÇA') || text.includes('Licença') || text.includes('licença')) {
-          if (
-            text.includes('Nome da Revenda') ||
-            text.includes('Número do Banco de Dados') ||
-            text.includes('Número de Licenças')
-          ) {
-            detectedBody = text;
-            break;
-          }
+    for (const el of Array.from(bodyElements)) {
+      const text = el.textContent || '';
+      if (/licen[cç]a/i.test(text)) {
+        if (
+          text.includes('Nome da Revenda') ||
+          text.includes('Número do Banco de Dados') ||
+          text.includes('Número de Licenças') ||
+          text.includes('Razão Social') ||
+          text.includes('Razao Social')
+        ) {
+          detectedBody = text;
+          break;
         }
+        if (!detectedBody && /(contrata[cç][aã]o|troca|cancelamento)/i.test(text)) {
+          detectedBody = text;
+        }
+      }
+    }
+
+    // Fallback: se detectedBody ainda está vazio, verifica textContent do targetScope
+    if (!detectedBody && targetScope.textContent && /licen[cç]a/i.test(targetScope.textContent)) {
+      const fullText = targetScope.textContent;
+      if (
+        fullText.includes('Nome da Revenda') ||
+        fullText.includes('Número do Banco de Dados') ||
+        fullText.includes('Número de Licenças')
+      ) {
+        detectedBody = fullText;
       }
     }
 
