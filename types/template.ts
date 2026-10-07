@@ -9,6 +9,7 @@ export interface QuickReplyTemplate {
 export interface InsertMessageRequest {
   action: 'INSERT_REPLY';
   content: string;
+  requestId?: string;
 }
 
 export interface InsertMessageResponse {

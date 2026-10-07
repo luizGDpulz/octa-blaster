@@ -123,12 +123,23 @@ export default defineContentScript({
       return candidates[0] || null;
     }
 
-    // Comunicação entre iframes caso o script esteja rodando em janelas filhas
+    // Controle de requisições processadas para evitar duplicidade entre múltiplos frames
+    const processedRequests = new Set<string>();
+
+    // Comunicação fallback entre iframes caso o script esteja rodando em janelas filhas
     window.addEventListener('message', (event) => {
-      if (event.data && event.data.type === 'OCTABLASTER_INSERT_BROADCAST' && typeof event.data.content === 'string') {
+      if (
+        event.data &&
+        event.data.type === 'OCTABLASTER_INSERT_BROADCAST' &&
+        typeof event.data.content === 'string'
+      ) {
+        const reqId = event.data.requestId as string | undefined;
+        if (reqId && processedRequests.has(reqId)) return;
+        if (reqId) processedRequests.add(reqId);
+
         const localTarget = findBestEditableElement();
         if (localTarget) {
-          insertTextIntoElement(localTarget, event.data.content);
+          insertTextIntoElement(localTarget, event.data.content, reqId);
         }
       }
     });
@@ -137,35 +148,52 @@ export default defineContentScript({
       (message: unknown, _sender, sendResponse: (res: InsertMessageResponse) => void) => {
         const req = message as InsertMessageRequest;
         if (req && req.action === 'INSERT_REPLY') {
-          // Dispara broadcast para qualquer iframe filho que possua o content script ativo
-          try {
-            const childIframes = document.querySelectorAll<HTMLIFrameElement>('iframe');
-            childIframes.forEach((ifr) => {
-              ifr.contentWindow?.postMessage(
-                { type: 'OCTABLASTER_INSERT_BROADCAST', content: req.content },
-                '*',
-              );
-            });
-          } catch {
-            // Ignore
+          const reqId = req.requestId || `req_${Date.now()}`;
+
+          // Se já foi processado nesta janela/frame, ignora
+          if (processedRequests.has(reqId)) {
+            sendResponse({ success: true });
+            return true;
           }
 
+          // Tenta encontrar o elemento editável (inclusive dentro de iframes do Octadesk)
           const target = findBestEditableElement();
 
           if (target) {
-            const success = insertTextIntoElement(target, req.content);
+            processedRequests.add(reqId);
+            const success = insertTextIntoElement(target, req.content, reqId);
             if (success) {
               lastActiveInput = target;
               sendResponse({ success: true });
             } else {
               sendResponse({ success: false, error: 'Falha ao injetar texto no editor do ticket.' });
             }
-          } else {
-            sendResponse({
-              success: false,
-              error: 'Nenhum campo de texto encontrado no ticket. Clique no campo de resposta antes de enviar.',
-            });
+            return true;
           }
+
+          // Fallback: se a janela principal não encontrou, repassa para iframes filhos
+          if (window === window.top) {
+            try {
+              const childIframes = document.querySelectorAll<HTMLIFrameElement>('iframe');
+              childIframes.forEach((ifr) => {
+                ifr.contentWindow?.postMessage(
+                  {
+                    type: 'OCTABLASTER_INSERT_BROADCAST',
+                    content: req.content,
+                    requestId: reqId,
+                  },
+                  '*',
+                );
+              });
+            } catch {
+              // Ignore
+            }
+          }
+
+          sendResponse({
+            success: false,
+            error: 'Nenhum campo de texto encontrado no ticket. Clique no campo de resposta antes de enviar.',
+          });
           return true;
         }
       },

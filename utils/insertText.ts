@@ -3,10 +3,28 @@
  * textareas e editores ricos (contenteditable / ProseMirror / TipTap / TinyMCE).
  * Suporta elementos dentro de iframes (contexto de document/window próprio).
  */
-export function insertTextIntoElement(target: HTMLElement, text: string): boolean {
+export function insertTextIntoElement(target: HTMLElement, text: string, requestId?: string): boolean {
   try {
     const doc = target.ownerDocument || document;
     const win = (doc.defaultView || window) as Window;
+
+    // Trava de idempotência contra inserção duplicada (race condition entre frames/broadcasts)
+    const now = Date.now();
+    const lastTime = Number(target.dataset.octaLastInsertTime || 0);
+    const lastReq = target.dataset.octaLastInsertReq || '';
+
+    if (requestId && lastReq === requestId) {
+      return true; // Já foi inserido com este ID de requisição
+    }
+
+    if (now - lastTime < 600) {
+      return true; // Evita dupla inserção no mesmo elemento em intervalo < 600ms
+    }
+
+    target.dataset.octaLastInsertTime = String(now);
+    if (requestId) {
+      target.dataset.octaLastInsertReq = requestId;
+    }
 
     target.focus();
 
