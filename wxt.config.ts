@@ -33,6 +33,16 @@ export default defineConfig({
       },
     },
   },
+  hooks: {
+    'build:manifestGenerated': (_wxt, manifest) => {
+      if (manifest.sidebar_action) {
+        (manifest.sidebar_action as any).default_icon = {
+          16: 'icon/16.png',
+          32: 'icon/32.png',
+        };
+      }
+    },
+  },
   suppressWarnings: {
     firefoxDataCollection: true,
   },
