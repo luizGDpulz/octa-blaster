@@ -298,9 +298,27 @@ async function triggerLicenseMentions() {
   }
 }
 
+const canOpenSidebar = ref(false);
+
+async function openSidebarPanel() {
+  try {
+    const b = (browser as any);
+    if (b?.sidebarAction?.open && typeof b.sidebarAction.open === 'function') {
+      await b.sidebarAction.open();
+      window.close();
+    }
+  } catch (err) {
+    console.warn('Não foi possível abrir painel lateral programaticamente:', err);
+  }
+}
+
 onMounted(() => {
   loadTemplates();
   checkLicenseStatus();
+  const b = (browser as any);
+  if (b?.sidebarAction?.open && typeof b.sidebarAction.open === 'function') {
+    canOpenSidebar.value = true;
+  }
 });
 </script>
 
@@ -317,9 +335,20 @@ onMounted(() => {
           <span class="brand-subtitle">Respostas Rápidas para Tickets</span>
         </div>
       </div>
-      <button v-if="!showForm" class="btn-primary-sm" @click="startCreate">
-        + Novo
-      </button>
+      <div class="header-actions">
+        <button
+          v-if="canOpenSidebar"
+          type="button"
+          class="btn-sidebar-panel"
+          title="Abrir no Painel Lateral do Firefox"
+          @click="openSidebarPanel"
+        >
+          📌 Painel
+        </button>
+        <button v-if="!showForm" class="btn-primary-sm" @click="startCreate">
+          + Novo
+        </button>
+      </div>
     </header>
 
     <!-- Status Message Alert -->
@@ -389,29 +418,26 @@ onMounted(() => {
             <button
               type="button"
               class="tag-btn tag-btn-highlight"
-              v-pre
               @click="insertVariable('{{Saudacao}}')"
               title="Alterna automaticamente entre 'Bom dia!' ou 'Boa tarde!' conforme o horário"
             >
-              {{Saudacao}}
+              <span v-pre>{{Saudacao}}</span>
             </button>
             <button
               type="button"
               class="tag-btn"
-              v-pre
               @click="insertVariable('{{Data}}')"
               title="Data atual formatada"
             >
-              {{Data}}
+              <span v-pre>{{Data}}</span>
             </button>
             <button
               type="button"
               class="tag-btn"
-              v-pre
               @click="insertVariable('{{Hora}}')"
               title="Hora atual formatada"
             >
-              {{Hora}}
+              <span v-pre>{{Hora}}</span>
             </button>
           </div>
         </div>
@@ -505,7 +531,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   width: 100%;
-  height: 100vh;
+  height: 100%;
   min-height: 480px;
   background: var(--bg-primary);
 }
@@ -518,6 +544,33 @@ onMounted(() => {
   background: #1c1b1c;
   color: #ffffff;
   border-bottom: 1px solid #3c3f43;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-sidebar-panel {
+  background: rgba(255, 255, 255, 0.12);
+  color: #dee0e4;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 5px 9px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-sidebar-panel:hover {
+  background: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.35);
 }
 
 .brand {

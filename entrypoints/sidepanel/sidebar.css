@@ -1,0 +1,21 @@
+html,
+body {
+  width: 100% !important;
+  min-width: 240px !important;
+  max-width: 100% !important;
+  height: 100vh !important;
+  min-height: 100% !important;
+  max-height: 100vh !important;
+}
+
+#app {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.popup-container {
+  width: 100% !important;
+  height: 100vh !important;
+  min-height: 100% !important;
+  border-radius: 0 !important;
+}
