@@ -123,7 +123,7 @@ export async function switchToInternalNote(scope: Document | HTMLElement = docum
       specificLink.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
       specificLink.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
       specificLink.click();
-      await sleep(300);
+      await sleep(150);
       return true;
     }
 
@@ -167,7 +167,7 @@ export async function switchToInternalNote(scope: Document | HTMLElement = docum
       specificLink.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
       specificLink.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
       specificLink.click();
-      await sleep(300);
+      await sleep(150);
       return true;
     }
 
@@ -184,7 +184,7 @@ export async function switchToInternalNote(scope: Document | HTMLElement = docum
         item.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
         item.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
         item.click();
-        await sleep(300);
+        await sleep(150);
         return true;
       }
     }
@@ -351,7 +351,7 @@ export async function automateLicenseMentions(
       );
     }
 
-    await sleep(400);
+    await sleep(200);
 
     // Passo 3: Inserir espaço e digitar @roberto
     insertTextIntoElement(targetEditor, ' @roberto');
@@ -368,7 +368,7 @@ export async function automateLicenseMentions(
       );
     }
 
-    await sleep(300);
+    await sleep(200);
 
     // Adiciona espaço final
     insertTextIntoElement(targetEditor, ' ');
