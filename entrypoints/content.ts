@@ -2,6 +2,7 @@ import { insertTextIntoElement } from '@/utils/insertText';
 import { detectLicenseTicket, type LicenseTicketInfo } from '@/utils/licenseDetector';
 import { automateLicenseMentions, switchToInternalNote } from '@/utils/mentionHelper';
 import { resolveVariables } from '@/utils/templateResolver';
+import { loadStoredTemplates } from '@/utils/templateStorage';
 import type { InsertMessageRequest, InsertMessageResponse, QuickReplyTemplate } from '@/types/template';
 
 export default defineContentScript({
@@ -696,8 +697,7 @@ export default defineContentScript({
         dropdownMenu.style.display = 'block';
 
         try {
-          const data = await browser.storage.local.get('octablaster_quick_replies_v2');
-          const templates = (data.octablaster_quick_replies_v2 as QuickReplyTemplate[]) || [];
+          const templates = await loadStoredTemplates();
 
           if (templates.length === 0) {
             dropdownList.innerHTML = '<div class="octa-dropdown-empty">Nenhum modelo cadastrado.</div>';

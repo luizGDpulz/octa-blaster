@@ -4,6 +4,14 @@ import type { QuickReplyTemplate, InsertMessageResponse } from '@/types/template
 import type { LicenseTicketInfo } from '@/utils/licenseDetector';
 import { resolveVariables } from '@/utils/templateResolver';
 import {
+  loadStoredTemplates,
+  saveStoredTemplates,
+  resetToDefaultTemplates,
+  exportTemplatesToJson,
+  parseTemplatesFromJson,
+  mergeImportedTemplates,
+} from '@/utils/templateStorage';
+import {
   MoreHorizontal,
   Plus,
   SquarePen,
@@ -28,42 +36,8 @@ import {
 } from 'lucide-vue-next';
 import { checkGithubRelease, type UpdateInfo } from '@/utils/updateChecker';
 
-const STORAGE_KEY = 'octablaster_quick_replies_v2';
-const HAS_INITIALIZED_KEY = 'octablaster_initialized_v2';
-
 const detectedLicense = ref<LicenseTicketInfo | null>(null);
 const isAutomatingLicense = ref(false);
-
-const DEFAULT_TEMPLATES: QuickReplyTemplate[] = [
-  {
-    id: 'inatividade-2-4',
-    title: 'Cobrança de Retorno (2º e 4º dia)',
-    content: '{{Saudacao}}\n\nAlgum retorno sobre este ticket? Caso contrário o mesmo será encerrado.',
-    category: 'Inatividade',
-    updatedAt: Date.now(),
-  },
-  {
-    id: 'inatividade-6',
-    title: 'Encerramento por Falta de Retorno (6º dia)',
-    content: '{{Saudacao}}\n\nNão recebemos retorno do último e-mail enviado e não havendo mais interações neste canal de atendimento, estaremos marcando este ticket como resolvido. Caso tenha alguma novidade sobre o assunto, basta responder este e-mail que reabriremos o caso.',
-    category: 'Inatividade',
-    updatedAt: Date.now(),
-  },
-  {
-    id: 'saudacao-geral',
-    title: 'Saudação e Em Análise',
-    content: '{{Saudacao}} Tudo bem?\n\nRecebemos sua solicitação e já estamos analisando o caso.\nEm breve entraremos em contato com mais detalhes.',
-    category: 'Geral',
-    updatedAt: Date.now(),
-  },
-  {
-    id: 'solicitacao-prints',
-    title: 'Solicitação de Prints / Evidências',
-    content: '{{Saudacao}}\n\nPara que possamos prosseguir com o diagnóstico, poderia nos enviar:\n1. Print ou gravação da tela com a mensagem de erro;\n2. O passo a passo exato para reproduzir o problema;\n3. O horário aproximado em que ocorreu.\n\nFicamos no aguardo!',
-    category: 'Suporte',
-    updatedAt: Date.now(),
-  },
-];
 
 const templates = ref<QuickReplyTemplate[]>([]);
 const searchQuery = ref('');
@@ -133,19 +107,7 @@ function setStatus(msg: string, type: 'success' | 'error' | 'info' = 'info') {
 
 async function loadTemplates() {
   try {
-    const data = await browser.storage.local.get([STORAGE_KEY, HAS_INITIALIZED_KEY]);
-    const stored = data[STORAGE_KEY] as QuickReplyTemplate[] | undefined;
-    const initialized = data[HAS_INITIALIZED_KEY] as boolean | undefined;
-
-    if (!initialized && (!stored || stored.length === 0)) {
-      templates.value = DEFAULT_TEMPLATES;
-      await browser.storage.local.set({
-        [STORAGE_KEY]: DEFAULT_TEMPLATES,
-        [HAS_INITIALIZED_KEY]: true,
-      });
-    } else {
-      templates.value = stored || [];
-    }
+    templates.value = await loadStoredTemplates();
   } catch (err) {
     console.error('Erro ao carregar modelos:', err);
     setStatus('Falha ao carregar modelos salvos', 'error');
@@ -154,10 +116,11 @@ async function loadTemplates() {
 
 async function saveTemplates() {
   try {
-    await browser.storage.local.set({ [STORAGE_KEY]: templates.value });
-  } catch (err) {
+    templates.value = await saveStoredTemplates(templates.value);
+  } catch (err: any) {
     console.error('Erro ao persistir modelos:', err);
-    setStatus('Erro ao salvar no armazenamento', 'error');
+    setStatus(err?.message || 'Erro ao salvar no armazenamento', 'error');
+    throw err;
   }
 }
 
@@ -172,13 +135,7 @@ function cancelResetDefaults() {
 async function confirmResetDefaults() {
   showConfirmResetModal.value = false;
   try {
-    const defaultIds = new Set(DEFAULT_TEMPLATES.map((t) => t.id));
-    // Preserva todos os modelos personalizados criados manualmente pelo usuário
-    const userCustomTemplates = templates.value.filter((t) => !defaultIds.has(t.id));
-
-    // Restaura os modelos padrões de fábrica e mantém os manuais
-    templates.value = [...DEFAULT_TEMPLATES, ...userCustomTemplates];
-    await saveTemplates();
+    templates.value = await resetToDefaultTemplates(templates.value);
     setStatus('Modelos padrão restaurados! Seus modelos manuais foram mantidos.', 'success');
   } catch (err) {
     console.error('Erro ao restaurar padrões:', err);
@@ -190,20 +147,11 @@ const fileInputRef = ref<HTMLInputElement | null>(null);
 
 function exportTemplates() {
   try {
-    const dataStr = JSON.stringify(templates.value, null, 2);
-    const blob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `octablaster-templates-${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    exportTemplatesToJson(templates.value);
     setStatus('Modelos exportados com sucesso!', 'success');
-  } catch (err) {
+  } catch (err: any) {
     console.error('Erro ao exportar modelos:', err);
-    setStatus('Falha ao exportar modelos.', 'error');
+    setStatus(err?.message || 'Falha ao exportar modelos.', 'error');
   }
 }
 
@@ -218,48 +166,13 @@ async function handleFileImport(e: Event) {
 
   try {
     const text = await file.text();
-    const parsed = JSON.parse(text);
-
-    if (!Array.isArray(parsed)) {
-      setStatus('Arquivo inválido: o formato deve ser uma lista de modelos.', 'error');
-      return;
-    }
-
-    const validItems: QuickReplyTemplate[] = [];
-    for (const item of parsed) {
-      if (typeof item === 'object' && item !== null && typeof item.title === 'string' && typeof item.content === 'string') {
-        validItems.push({
-          id: typeof item.id === 'string' ? item.id : `tpl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-          title: item.title.trim(),
-          content: item.content,
-          category: typeof item.category === 'string' ? item.category.trim() : undefined,
-          updatedAt: typeof item.updatedAt === 'number' ? item.updatedAt : Date.now(),
-        });
-      }
-    }
-
-    if (validItems.length === 0) {
-      setStatus('Nenhum modelo válido encontrado no arquivo JSON.', 'error');
-      return;
-    }
-
-    // Mescla itens evitando duplicidade de ID
-    let importedCount = 0;
-    for (const item of validItems) {
-      const existingIdx = templates.value.findIndex((t) => t.id === item.id);
-      if (existingIdx !== -1) {
-        templates.value[existingIdx] = item;
-      } else {
-        templates.value.push(item);
-      }
-      importedCount++;
-    }
-
-    await saveTemplates();
-    setStatus(`${importedCount} modelos importados com sucesso!`, 'success');
-  } catch (err) {
+    const importedItems = parseTemplatesFromJson(text);
+    const { count, merged } = await mergeImportedTemplates(templates.value, importedItems);
+    templates.value = merged;
+    setStatus(`${count} modelo(s) importado(s) com sucesso!`, 'success');
+  } catch (err: any) {
     console.error('Erro ao importar modelos:', err);
-    setStatus('Erro ao ler ou processar arquivo JSON.', 'error');
+    setStatus(err?.message || 'Erro ao processar arquivo JSON.', 'error');
   } finally {
     target.value = '';
   }
@@ -289,46 +202,61 @@ function cancelForm() {
 async function submitForm() {
   const title = formTitle.value.trim();
   const content = formContent.value.trim();
-  const category = formCategory.value.trim() || undefined;
+  const category = formCategory.value.trim();
 
   if (!title || !content) {
     setStatus('Preencha o título e a mensagem.', 'error');
     return;
   }
 
-  if (editingId.value) {
-    const currentId = editingId.value;
-    const idx = templates.value.findIndex((t) => t.id === currentId);
-    if (idx !== -1) {
-      templates.value[idx] = {
-        id: currentId,
+  try {
+    if (editingId.value) {
+      const currentId = editingId.value;
+      const idx = templates.value.findIndex((t) => t.id === currentId);
+      if (idx !== -1) {
+        const updatedItem: QuickReplyTemplate = {
+          id: currentId,
+          title,
+          content,
+          updatedAt: Date.now(),
+        };
+        if (category) {
+          updatedItem.category = category;
+        }
+        templates.value[idx] = updatedItem;
+      }
+    } else {
+      const newTemplate: QuickReplyTemplate = {
+        id: typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `tpl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         title,
         content,
-        category,
         updatedAt: Date.now(),
       };
-      setStatus('Modelo atualizado com sucesso!', 'success');
+      if (category) {
+        newTemplate.category = category;
+      }
+      templates.value.unshift(newTemplate);
     }
-  } else {
-    const newTemplate: QuickReplyTemplate = {
-      id: crypto.randomUUID ? crypto.randomUUID() : `tpl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      title,
-      content,
-      category,
-      updatedAt: Date.now(),
-    };
-    templates.value.unshift(newTemplate);
-    setStatus('Novo modelo criado!', 'success');
-  }
 
-  await saveTemplates();
-  cancelForm();
+    await saveTemplates();
+    setStatus(editingId.value ? 'Modelo atualizado com sucesso!' : 'Novo modelo criado!', 'success');
+    cancelForm();
+  } catch (err: any) {
+    console.error('Falha ao submeter formulário:', err);
+    // Não fecha o formulário se houver erro para que o usuário não perca seu texto digitado
+  }
 }
 
 async function removeTemplate(id: string) {
-  templates.value = templates.value.filter((t) => t.id !== id);
-  await saveTemplates();
-  setStatus('Modelo removido.', 'info');
+  try {
+    templates.value = templates.value.filter((t) => t.id !== id);
+    await saveTemplates();
+    setStatus('Modelo removido.', 'info');
+  } catch (err) {
+    console.error('Falha ao remover modelo:', err);
+  }
 }
 
 async function insertIntoTicket(template: QuickReplyTemplate) {
