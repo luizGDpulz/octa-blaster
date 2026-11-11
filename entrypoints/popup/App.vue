@@ -1,8 +1,27 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import type { QuickReplyTemplate, InsertMessageResponse } from '@/types/template';
 import type { LicenseTicketInfo } from '@/utils/licenseDetector';
 import { resolveVariables } from '@/utils/templateResolver';
+import {
+  MoreHorizontal,
+  Plus,
+  Search,
+  Pencil,
+  Trash2,
+  Copy,
+  Send,
+  Loader2,
+  X,
+  PanelRight,
+  Download,
+  Upload,
+  RotateCcw,
+  Tag,
+  CheckCircle2,
+  AlertCircle,
+  Info,
+} from 'lucide-vue-next';
 
 const STORAGE_KEY = 'octablaster_quick_replies_v2';
 const HAS_INITIALIZED_KEY = 'octablaster_initialized_v2';
@@ -13,28 +32,28 @@ const isAutomatingLicense = ref(false);
 const DEFAULT_TEMPLATES: QuickReplyTemplate[] = [
   {
     id: 'inatividade-2-4',
-    title: '⏳ Cobrança de Retorno (2º e 4º dia)',
+    title: 'Cobrança de Retorno (2º e 4º dia)',
     content: '{{Saudacao}}\n\nAlgum retorno sobre este ticket? Caso contrário o mesmo será encerrado.',
     category: 'Inatividade',
     updatedAt: Date.now(),
   },
   {
     id: 'inatividade-6',
-    title: '🛑 Encerramento por Falta de Retorno (6º dia)',
+    title: 'Encerramento por Falta de Retorno (6º dia)',
     content: '{{Saudacao}}\n\nNão recebemos retorno do último e-mail enviado e não havendo mais interações neste canal de atendimento, estaremos marcando este ticket como resolvido. Caso tenha alguma novidade sobre o assunto, basta responder este e-mail que reabriremos o caso.',
     category: 'Inatividade',
     updatedAt: Date.now(),
   },
   {
     id: 'saudacao-geral',
-    title: '👋 Saudação e Em Análise',
+    title: 'Saudação e Em Análise',
     content: '{{Saudacao}} Tudo bem?\n\nRecebemos sua solicitação e já estamos analisando o caso.\nEm breve entraremos em contato com mais detalhes.',
     category: 'Geral',
     updatedAt: Date.now(),
   },
   {
     id: 'solicitacao-prints',
-    title: '📸 Solicitação de Prints / Evidências',
+    title: 'Solicitação de Prints / Evidências',
     content: '{{Saudacao}}\n\nPara que possamos prosseguir com o diagnóstico, poderia nos enviar:\n1. Print ou gravação da tela com a mensagem de erro;\n2. O passo a passo exato para reproduzir o problema;\n3. O horário aproximado em que ocorreu.\n\nFicamos no aguardo!',
     category: 'Suporte',
     updatedAt: Date.now(),
@@ -55,6 +74,11 @@ const statusType = ref<'success' | 'error' | 'info'>('info');
 const statusMessage = ref('');
 let statusTimeout: number | undefined;
 
+const isMenuOpen = ref(false);
+const menuRef = ref<HTMLElement | null>(null);
+const showConfirmResetModal = ref(false);
+const appVersion = ref('0.4.0');
+
 function setStatus(msg: string, type: 'success' | 'error' | 'info' = 'info') {
   statusMessage.value = msg;
   statusType.value = type;
@@ -63,8 +87,6 @@ function setStatus(msg: string, type: 'success' | 'error' | 'info' = 'info') {
     statusMessage.value = '';
   }, 3500);
 }
-
-
 
 async function loadTemplates() {
   try {
@@ -96,10 +118,29 @@ async function saveTemplates() {
   }
 }
 
-async function resetToDefaults() {
-  templates.value = [...DEFAULT_TEMPLATES];
-  await saveTemplates();
-  setStatus('Modelos padrão de inatividade restaurados!', 'success');
+function requestResetDefaults() {
+  showConfirmResetModal.value = true;
+}
+
+function cancelResetDefaults() {
+  showConfirmResetModal.value = false;
+}
+
+async function confirmResetDefaults() {
+  showConfirmResetModal.value = false;
+  try {
+    const defaultIds = new Set(DEFAULT_TEMPLATES.map((t) => t.id));
+    // Preserva todos os modelos personalizados criados manualmente pelo usuário
+    const userCustomTemplates = templates.value.filter((t) => !defaultIds.has(t.id));
+
+    // Restaura os modelos padrões de fábrica e mantém os manuais
+    templates.value = [...DEFAULT_TEMPLATES, ...userCustomTemplates];
+    await saveTemplates();
+    setStatus('Modelos padrão restaurados! Seus modelos manuais foram mantidos.', 'success');
+  } catch (err) {
+    console.error('Erro ao restaurar padrões:', err);
+    setStatus('Erro ao restaurar modelos padrão.', 'error');
+  }
 }
 
 const fileInputRef = ref<HTMLInputElement | null>(null);
@@ -336,7 +377,7 @@ async function triggerLicenseMentions() {
     })) as InsertMessageResponse | undefined;
 
     if (res?.success) {
-      setStatus('✅ Responsáveis de licenças marcados em Anotação Interna!', 'success');
+      setStatus('Responsáveis de licenças marcados em Anotação Interna!', 'success');
     } else {
       setStatus(res?.error || 'Erro ao marcar responsáveis.', 'error');
     }
@@ -396,10 +437,55 @@ async function openSidebarPanel() {
   }
 }
 
+function toggleMenu() {
+  isMenuOpen.value = !isMenuOpen.value;
+}
+
+function closeMenu() {
+  isMenuOpen.value = false;
+}
+
+function handleMenuAction(action: () => void | Promise<void>) {
+  closeMenu();
+  action();
+}
+
+function handleClickOutside(event: MouseEvent) {
+  if (menuRef.value && !menuRef.value.contains(event.target as Node)) {
+    closeMenu();
+  }
+}
+
+function handleKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    if (isMenuOpen.value) {
+      closeMenu();
+    }
+    if (showConfirmResetModal.value) {
+      cancelResetDefaults();
+    }
+  }
+}
+
 onMounted(() => {
+  try {
+    const manifest = browser?.runtime?.getManifest?.();
+    if (manifest?.version) {
+      appVersion.value = manifest.version;
+    }
+  } catch {}
+
   loadTemplates();
   checkLicenseStatus();
   checkSidebarSupport();
+
+  document.addEventListener('click', handleClickOutside);
+  document.addEventListener('keydown', handleKeydown);
+});
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside);
+  document.removeEventListener('keydown', handleKeydown);
 });
 </script>
 
@@ -408,7 +494,7 @@ onMounted(() => {
     <!-- Header -->
     <header class="header">
       <div class="brand">
-        <svg class="brand-logo" viewBox="0 0 498.69 498.69" width="26" height="26" fill="#ffc600" aria-hidden="true">
+        <svg class="brand-logo" viewBox="0 0 498.69 498.69" width="24" height="24" fill="#ffc600" aria-hidden="true">
           <path d="M6.14,102C11.14,49.59,49.47,10.93,101.89,6,137.18,2.69,185.36,0,249.34,0s114.33,2.76,149.83,6.18c51.07,4.92,88.41,42.26,93.34,93.34,3.42,35.5,6.18,84.39,6.18,149.83s-2.76,114.32-6.18,149.82c-4.93,51.08-42.27,88.42-93.34,93.34-35.5,3.42-84.4,6.18-149.83,6.18s-112.16-2.63-147.45-6c-52.42-4.93-90.73-43.59-95.75-96C2.74,361.07,0,312.69,0,249.3S2.72,137.57,6.14,102m392.8,209.12c-3.01-11.83-15.03-18.98-26.86-16-6.28,1.42-12.77,1.74-19.16,.93-15.58-1.65-36-16.44-39.76-37.9-1.09-12.34,4.58-21.56,11.24-31.43,9-13.28,17.33-29.82,17.33-51.11,0-47.74-43.63-90.33-92.34-90.33s-93.78,39.72-93.78,90.28c0,21.29,9.82,37.83,18.82,51.11,6.66,9.88,12.33,19.08,11.24,31.43-1.08,17.13-24.21,36.25-39.76,37.9-6.39,.81-12.88,.49-19.16-.93-11.84-3.01-23.88,4.15-26.89,15.99h0c-1.43,5.69-.54,11.71,2.47,16.73,3.02,5.03,7.92,8.66,13.61,10.08,7.41,1.82,15.02,2.72,22.65,2.68,4.01,0,8.02-.22,12-.65,9.92-.9,19.58-3.65,28.48-8.11,5.4-1.37,10.41-3.95,14.65-7.55,2.42-1.88,4-3.09,5.28-2.21,3,2,2.76,4.6,1.58,7.5-.26,.58-.53,1.16-.81,1.73-.92,1.67-1.92,3.29-3,4.85-.63,.94-1.23,1.84-1.73,2.65-2.89,4.73-.49,1.07,4-5.91-1.8,3.46-3.85,6.79-6.14,9.95-9,12.35-16.76,21.68-23.8,28.54-6.41,6.23-8.42,15.71-5.08,24,4.62,11.35,17.56,16.81,28.92,12.19,2.64-1.07,5.04-2.64,7.08-4.62,8.85-8.63,18.26-19.8,28.7-34.2,8.75-12.12,15.27-25.7,19.26-40.11,.64-.84,1.51-1.47,2.51-1.8,3.95,15.06,10.65,29.27,19.75,41.91,10.48,14.4,19.86,25.57,28.71,34.2,8.71,8.55,22.71,8.41,31.26-.3s8.41-22.71-.31-31.25c-7-6.86-14.82-16.19-23.8-28.54-4.56-6.33-8.18-13.29-10.74-20.66,.44-.77,1.06-1.43,1.81-1.91,1.33-.86,2.87,.35,5.27,2.22,3.96,3.36,8.58,5.84,13.57,7.29,8.7,5.2,19.1,8.8,32.23,10.19,3.99,.43,7.99,.65,12,.65,7.63,.04,15.24-.86,22.65-2.68,8.69-2.16,15.22-9.36,16.52-18.22,.42-2.88,.26-5.81-.47-8.62v.05Zm-141.94-122c0,14.66,7.93,18.34,17.72,18.34s17.69-3.69,17.69-18.34-8-21.44-17.82-21.44-17.59,6.74-17.59,21.4v.04Zm-52.67,0c0,14.53,7.85,18.11,17.54,18.11s17.53-3.59,17.53-18.11-7.92-21.2-17.66-21.2-17.41,6.64-17.41,21.16v.04Z" />
         </svg>
         <div>
@@ -418,17 +504,78 @@ onMounted(() => {
       </div>
       <div class="header-actions">
         <button
-          v-if="canOpenSidebar"
+          v-if="!showForm"
           type="button"
-          class="btn-sidebar-panel"
-          title="Abrir no Painel Lateral (Sidebar)"
-          @click="openSidebarPanel"
+          class="btn-primary-sm"
+          title="Novo modelo de resposta"
+          @click="startCreate"
         >
-          📌 Painel
+          <Plus :size="13" :stroke-width="2.5" />
+          <span>Novo</span>
         </button>
-        <button v-if="!showForm" class="btn-primary-sm" @click="startCreate">
-          + Novo
-        </button>
+
+        <!-- Dropdown Menu Estilo Notion -->
+        <div class="options-menu-wrapper" ref="menuRef">
+          <button
+            type="button"
+            class="btn-options-trigger"
+            :class="{ active: isMenuOpen }"
+            title="Mais opções"
+            aria-label="Mais opções"
+            @click="toggleMenu"
+          >
+            <MoreHorizontal :size="17" :stroke-width="2" />
+          </button>
+
+          <transition name="menu-scale">
+            <div v-if="isMenuOpen" class="notion-dropdown-menu">
+              <div v-if="canOpenSidebar" class="menu-section">
+                <button
+                  type="button"
+                  class="menu-item"
+                  @click="handleMenuAction(openSidebarPanel)"
+                >
+                  <PanelRight :size="14" class="menu-item-icon" />
+                  <span class="menu-item-text">Abrir no Painel Lateral</span>
+                </button>
+              </div>
+
+              <div v-if="canOpenSidebar" class="menu-divider"></div>
+
+              <div class="menu-section">
+                <button
+                  type="button"
+                  class="menu-item"
+                  @click="handleMenuAction(exportTemplates)"
+                >
+                  <Download :size="14" class="menu-item-icon" />
+                  <span class="menu-item-text">Exportar modelos (JSON)</span>
+                </button>
+                <button
+                  type="button"
+                  class="menu-item"
+                  @click="handleMenuAction(triggerImport)"
+                >
+                  <Upload :size="14" class="menu-item-icon" />
+                  <span class="menu-item-text">Importar modelos (JSON)</span>
+                </button>
+              </div>
+
+              <div class="menu-divider"></div>
+
+              <div class="menu-section">
+                <button
+                  type="button"
+                  class="menu-item"
+                  @click="handleMenuAction(requestResetDefaults)"
+                >
+                  <RotateCcw :size="14" class="menu-item-icon" />
+                  <span class="menu-item-text">Restaurar modelos padrão</span>
+                </button>
+              </div>
+            </div>
+          </transition>
+        </div>
       </div>
     </header>
 
@@ -436,7 +583,9 @@ onMounted(() => {
     <transition name="fade">
       <div v-if="statusMessage" :class="['status-banner', `status-${statusType}`]">
         <span class="status-icon">
-          {{ statusType === 'success' ? '✔' : statusType === 'error' ? '✖' : 'ℹ' }}
+          <CheckCircle2 v-if="statusType === 'success'" :size="14" :stroke-width="2.2" />
+          <AlertCircle v-else-if="statusType === 'error'" :size="14" :stroke-width="2.2" />
+          <Info v-else :size="14" :stroke-width="2.2" />
         </span>
         <span class="status-text">{{ statusMessage }}</span>
       </div>
@@ -460,7 +609,9 @@ onMounted(() => {
         :disabled="isAutomatingLicense"
         @click="triggerLicenseMentions"
       >
-        {{ isAutomatingLicense ? '⏳ Marcando...' : '🏷️ Marcar Licenças' }}
+        <Loader2 v-if="isAutomatingLicense" :size="12" class="spin-icon" />
+        <Tag v-else :size="12" :stroke-width="2" />
+        <span>{{ isAutomatingLicense ? 'Marcando...' : 'Marcar Licenças' }}</span>
       </button>
     </div>
 
@@ -468,7 +619,9 @@ onMounted(() => {
     <div v-if="showForm" class="form-container">
       <div class="form-header">
         <h2>{{ editingId ? 'Editar Modelo' : 'Novo Modelo de Resposta' }}</h2>
-        <button class="btn-close" @click="cancelForm">✕</button>
+        <button class="btn-close" title="Fechar" @click="cancelForm">
+          <X :size="15" :stroke-width="2" />
+        </button>
       </div>
 
       <div class="form-group">
@@ -543,17 +696,20 @@ onMounted(() => {
     <div v-else class="list-container">
       <!-- Barra de Busca -->
       <div class="search-box">
-        <input
-          v-model="searchQuery"
-          type="search"
-          placeholder="🔍 Buscar por título ou conteúdo..."
-        />
+        <div class="search-input-wrapper">
+          <Search :size="14" class="search-input-icon" />
+          <input
+            v-model="searchQuery"
+            type="search"
+            placeholder="Buscar por título ou conteúdo..."
+          />
+        </div>
       </div>
 
       <div class="templates-scroll">
         <div v-if="filteredTemplates.length === 0" class="empty-state">
           <p v-if="searchQuery">Nenhum modelo encontrado para "{{ searchQuery }}".</p>
-          <p v-else>Nenhum modelo cadastrado. Clique em "+ Novo" ou "Restaurar Padrões".</p>
+          <p v-else>Nenhum modelo cadastrado. Clique em "Novo" ou abra as opções para restaurar os padrões.</p>
         </div>
 
         <div
@@ -567,8 +723,12 @@ onMounted(() => {
               <span v-if="tpl.category" class="card-badge">{{ tpl.category }}</span>
             </div>
             <div class="card-menu">
-              <button class="btn-icon" title="Editar" @click="startEdit(tpl)">✏️</button>
-              <button class="btn-icon btn-icon-del" title="Excluir" @click="removeTemplate(tpl.id)">🗑️</button>
+              <button class="btn-icon" title="Editar modelo" @click="startEdit(tpl)">
+                <Pencil :size="13" :stroke-width="1.8" />
+              </button>
+              <button class="btn-icon btn-icon-del" title="Excluir modelo" @click="removeTemplate(tpl.id)">
+                <Trash2 :size="13" :stroke-width="1.8" />
+              </button>
             </div>
           </div>
 
@@ -576,41 +736,33 @@ onMounted(() => {
 
           <div class="card-actions">
             <button
+              type="button"
               class="btn-action btn-copy"
               title="Copiar para área de transferência"
               @click="copyToClipboard(tpl)"
             >
-              📋 Copiar
+              <Copy :size="13" :stroke-width="1.8" />
+              <span>Copiar</span>
             </button>
             <button
+              type="button"
               class="btn-action btn-send"
               :disabled="isSending"
               title="Inserir diretamente no ticket em foco"
               @click="insertIntoTicket(tpl)"
             >
-              {{ isSending ? '⏳ Inserindo...' : '🚀 Inserir no Ticket' }}
+              <Loader2 v-if="isSending" :size="13" class="spin-icon" />
+              <Send v-else :size="13" :stroke-width="2" />
+              <span>{{ isSending ? 'Inserindo...' : 'Inserir no Ticket' }}</span>
             </button>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Rodapé -->
+    <!-- Rodapé Minimalista -->
     <footer class="footer">
-      <div class="footer-hint">
-        Use <code v-pre>{{Saudacao}}</code> para alternar Bom dia / Boa tarde!
-      </div>
-      <div class="footer-actions">
-        <button class="btn-footer-link" title="Exportar modelos para arquivo JSON" @click="exportTemplates">
-          📤 Exportar
-        </button>
-        <button class="btn-footer-link" title="Importar modelos de arquivo JSON" @click="triggerImport">
-          📥 Importar
-        </button>
-        <button class="btn-restore" title="Restaurar modelos padrão" @click="resetToDefaults">
-          🔄 Padrões
-        </button>
-      </div>
+      <span class="build-version">OctaBlaster v{{ appVersion }}</span>
       <input
         ref="fileInputRef"
         type="file"
@@ -619,6 +771,31 @@ onMounted(() => {
         @change="handleFileImport"
       />
     </footer>
+
+    <!-- Modal de Confirmação de Restauração Estilo Notion -->
+    <transition name="fade">
+      <div v-if="showConfirmResetModal" class="modal-backdrop" @click.self="cancelResetDefaults">
+        <div class="notion-modal">
+          <div class="notion-modal-header">
+            <div class="modal-icon-badge">
+              <RotateCcw :size="16" :stroke-width="2" />
+            </div>
+            <h3 class="modal-title">Restaurar modelos padrão?</h3>
+          </div>
+          <p class="modal-body">
+            Os modelos padrão originais serão restabelecidos. <strong>Seus modelos personalizados criados manualmente serão mantidos</strong>.
+          </p>
+          <div class="modal-actions">
+            <button type="button" class="btn-secondary" @click="cancelResetDefaults">
+              Cancelar
+            </button>
+            <button type="button" class="btn-primary" @click="confirmResetDefaults">
+              Restaurar
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -630,43 +807,18 @@ onMounted(() => {
   height: 100%;
   min-height: 480px;
   background: var(--bg-primary);
+  position: relative;
 }
 
+/* Header */
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 14px;
+  padding: 10px 14px;
   background: #1c1b1c;
   color: #ffffff;
   border-bottom: 1px solid #3c3f43;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.btn-sidebar-panel {
-  background: rgba(255, 255, 255, 0.12);
-  color: #dee0e4;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  padding: 5px 9px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.btn-sidebar-panel:hover {
-  background: rgba(255, 255, 255, 0.22);
-  color: #ffffff;
-  border-color: rgba(255, 255, 255, 0.35);
 }
 
 .brand {
@@ -681,26 +833,35 @@ onMounted(() => {
 }
 
 .brand-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   line-height: 1.2;
 }
 
 .brand-subtitle {
-  font-size: 11px;
+  font-size: 10px;
   color: #dee0e4;
   display: block;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .btn-primary-sm {
   background: #ffc600;
   color: #1c1b1c;
   border: none;
-  padding: 6px 12px;
-  border-radius: 4px;
-  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 5px;
+  font-size: 11px;
   font-weight: 700;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -710,6 +871,102 @@ onMounted(() => {
   box-shadow: 0 2px 6px rgba(255, 198, 0, 0.4);
 }
 
+/* Notion Dropdown Menu */
+.options-menu-wrapper {
+  position: relative;
+}
+
+.btn-options-trigger {
+  background: transparent;
+  color: #dee0e4;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  width: 28px;
+  height: 28px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-options-trigger:hover,
+.btn-options-trigger.active {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.notion-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 220px;
+  background: #ffffff;
+  border: 1px solid #dee0e4;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.05);
+  padding: 4px;
+  z-index: 100;
+  transform-origin: top right;
+}
+
+.menu-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  font-size: 12px;
+  color: #1c1b1c;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s ease;
+}
+
+.menu-item:hover {
+  background: #f1f2f4;
+}
+
+.menu-item-icon {
+  flex-shrink: 0;
+  color: #5b5f63;
+}
+
+.menu-item-text {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.menu-divider {
+  height: 1px;
+  background: #f0f1f3;
+  margin: 4px 2px;
+}
+
+/* Transições do Menu */
+.menu-scale-enter-active,
+.menu-scale-leave-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.menu-scale-enter-from,
+.menu-scale-leave-to {
+  opacity: 0;
+  transform: scale(0.96) translateY(-4px);
+}
+
+/* Status Banner */
 .status-banner {
   display: flex;
   align-items: center;
@@ -739,10 +996,12 @@ onMounted(() => {
 }
 
 .status-icon {
-  font-weight: bold;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
-/* License Banner Styles - Secullum VMS Yellow & Gray Theme */
+/* License Banner */
 .license-banner {
   display: flex;
   align-items: center;
@@ -777,10 +1036,13 @@ onMounted(() => {
   color: #1c1b1c;
   border: none;
   border-radius: 4px;
-  padding: 6px 12px;
+  padding: 5px 10px;
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   transition: all 0.15s;
   white-space: nowrap;
 }
@@ -821,12 +1083,19 @@ onMounted(() => {
 .btn-close {
   background: transparent;
   border: none;
-  font-size: 14px;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
   cursor: pointer;
   color: var(--text-muted);
+  transition: background 0.15s, color 0.15s;
 }
 
 .btn-close:hover {
+  background: #f1f5f9;
   color: var(--text-primary);
 }
 
@@ -890,7 +1159,7 @@ input[type="text"],
 input[type="search"],
 textarea {
   width: 100%;
-  padding: 8px 10px;
+  padding: 7px 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: #ffffff;
@@ -964,6 +1233,23 @@ textarea {
   background: var(--bg-primary);
 }
 
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-input-icon {
+  position: absolute;
+  left: 9px;
+  color: #8a8f96;
+  pointer-events: none;
+}
+
+.search-input-wrapper input {
+  padding-left: 30px;
+}
+
 .templates-scroll {
   flex: 1;
   overflow-y: auto;
@@ -1027,26 +1313,29 @@ textarea {
 
 .card-menu {
   display: flex;
-  gap: 4px;
+  gap: 2px;
 }
 
 .btn-icon {
   background: transparent;
   border: none;
-  font-size: 12px;
   cursor: pointer;
-  padding: 3px;
+  padding: 4px;
   border-radius: 4px;
-  opacity: 0.6;
-  transition: opacity 0.2s, background 0.2s;
+  color: #5b5f63;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
 }
 
 .btn-icon:hover {
-  opacity: 1;
+  color: #1c1b1c;
   background: #f1f5f9;
 }
 
 .btn-icon-del:hover {
+  color: #ba1a1a;
   background: #fee2e2;
 }
 
@@ -1072,10 +1361,14 @@ textarea {
 .btn-action {
   flex: 1;
   padding: 6px 10px;
-  border-radius: 4px;
+  border-radius: 5px;
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -1107,66 +1400,104 @@ textarea {
   box-shadow: 0 2px 6px rgba(255, 198, 0, 0.4);
 }
 
+/* Footer Notion-style minimal */
 .footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 8px 14px;
+  justify-content: center;
+  padding: 6px 14px;
   background: var(--bg-secondary);
   border-top: 1px solid var(--border);
+  min-height: 30px;
+}
+
+.build-version {
   font-size: 11px;
-  color: var(--text-muted);
+  font-weight: 500;
+  color: #8a8f96;
+  letter-spacing: 0.02em;
 }
 
-.footer-hint code {
-  background: #e2e8f0;
-  color: #1e293b;
-  padding: 1px 4px;
-  border-radius: 3px;
-  font-size: 10px;
+/* Modal Estilo Notion */
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 15, 15, 0.45);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 200;
 }
 
-.footer-actions {
+.notion-modal {
+  background: #ffffff;
+  border: 1px solid #dee0e4;
+  border-radius: 8px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+  padding: 16px;
+  width: 100%;
+  max-width: 310px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.notion-modal-header {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.btn-footer-link {
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 500;
-  cursor: pointer;
-  padding: 2px 4px;
-  border-radius: 4px;
-  transition: color 0.15s, background 0.15s;
+.modal-icon-badge {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: rgba(255, 198, 0, 0.15);
+  color: #6f5600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
-.btn-footer-link:hover {
-  color: var(--text-primary);
-  background: rgba(0, 0, 0, 0.05);
+.modal-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1c1b1c;
 }
 
-.btn-restore {
-  background: transparent;
-  border: none;
-  color: #2563eb;
-  font-size: 11px;
-  font-weight: 500;
-  cursor: pointer;
-  padding: 2px 4px;
-  border-radius: 4px;
+.modal-body {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #44474a;
 }
 
-.btn-restore:hover {
-  text-decoration: underline;
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* Utilitários e animações */
+.spin-icon {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.2s;
+  transition: opacity 0.2s ease;
 }
 
 .fade-enter-from,

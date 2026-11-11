@@ -41,8 +41,8 @@ Projetada especificamente para equipes de atendimento e suporte que utilizam o *
 
 ### 3. 🦊 Suporte ao Painel Lateral (Sidebar) no Firefox e Chromium
 - Permite fixar o OctaBlaster na **barra lateral do Firefox e navegadores Chromium** (sem fechar quando você clica na página).
-- **No Firefox**: Pressione `Ctrl+B` (ou menu *Exibir* -> *Painel Lateral* -> *OctaBlaster*), ou clique no botão `📌 Painel` no popup.
-- **No Chrome / Chromium (MV3)**: Clique diretamente no botão `📌 Painel` dentro do popup para expandir o Side Panel nativo.
+- **No Firefox**: Pressione `Ctrl+B` (ou menu *Exibir* -> *Painel Lateral* -> *OctaBlaster*), ou abra o menu de opções (`...`) no popup e selecione **"Abrir no Painel Lateral"**.
+- **No Chrome / Chromium (MV3)**: Abra o menu de opções (`...`) dentro do popup e selecione **"Abrir no Painel Lateral"** para expandir o Side Panel nativo.
 
 ### 4. ☀️ Variáveis Dinâmicas Compartilhadas (`{{Saudacao}}`, `{{Data}}`, `{{Hora}}`)
 - Resolução centralizada tanto no popup quanto no widget in-page.
@@ -53,8 +53,9 @@ Projetada especificamente para equipes de atendimento e suporte que utilizam o *
 - Também suporta `{data}` e `{hora}` formatadas no padrão brasileiro.
 
 ### 5. 💾 Backup & Portabilidade: Exportação e Importação de Modelos (JSON)
-- Exporte todos os seus modelos de resposta em um arquivo `.json` com um clique no rodapé (`📤 Exportar`).
-- Importe seus modelos em outra máquina ou navegador (`📥 Importar`), com validação automática de esquema e mesclagem inteligente sem perda de dados.
+- Exporte todos os seus modelos de resposta em um arquivo `.json` com um clique no menu de opções Notion-style (`...` -> *Exportar modelos*).
+- Importe seus modelos em outra máquina ou navegador (`...` -> *Importar modelos*), com validação automática de esquema e mesclagem inteligente sem perda de dados.
+- **Restauração Segura**: O recurso de restauração de padrões agora solicita confirmação prévia e **preserva 100% dos modelos criados manualmente pelo usuário**.
 
 ### 6. ⚡ Desempenho Otimizado com MutationObserver
 - Substitui loops de polling por um `MutationObserver` inteligente debouncado (200ms), reduzindo o uso de CPU e bateria em abas em segundo plano.
