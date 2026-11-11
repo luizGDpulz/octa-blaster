@@ -57,13 +57,17 @@ Projetada especificamente para equipes de atendimento e suporte que utilizam o *
 - Importe seus modelos em outra máquina ou navegador (`...` -> *Importar modelos*), com validação automática de esquema e mesclagem inteligente sem perda de dados.
 - **Restauração Segura**: O recurso de restauração de padrões agora solicita confirmação prévia e **preserva 100% dos modelos criados manualmente pelo usuário**.
 
-### 6. ⚡ Desempenho Otimizado com MutationObserver
+### 6. 🔄 Verificação de Atualizações (GitHub Releases)
+- Opção **"Verificar atualizações"** no menu Notion-style (`...`).
+- Consulta a API pública do GitHub Releases, compara a versão semântica instalada e exibe modal informativo quando houver nova versão com link direto para download/release.
+
+### 7. ⚡ Desempenho Otimizado com MutationObserver
 - Substitui loops de polling por um `MutationObserver` inteligente debouncado (200ms), reduzindo o uso de CPU e bateria em abas em segundo plano.
 
-### 7. 🛡️ Trava de Idempotência Anti-Duplicação
+### 8. 🛡️ Trava de Idempotência Anti-Duplicação
 - Previne colagens múltiplas acidentais causadas por múltiplos frames (`iframe.embedded__app_GUiYT`) ou cliques repetidos.
 
-### 8. 🐙 Identidade Visual Octadesk
+### 9. 🐙 Identidade Visual Octadesk
 - Ícone oficial do Octadesk com cor `#ffc600` incorporado em todos os tamanhos (16px, 32px, 48px, 96px, 128px e SVG).
 - Aplicado diretamente no cabeçalho do popup, no widget flutuante da tela e no manifesto da extensão.
 
