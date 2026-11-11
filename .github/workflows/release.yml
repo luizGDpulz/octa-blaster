@@ -39,6 +39,20 @@ jobs:
       - name: Build & Zip for Firefox MV2
         run: pnpm zip:firefox
 
+      - name: Sign extension for Firefox (AMO Unlisted)
+        if: env.FIREFOX_JWT_ISSUER != '' && env.FIREFOX_JWT_SECRET != ''
+        run: |
+          pnpm web-ext sign \
+            --source-dir .output/firefox-mv2 \
+            --artifacts-dir .output \
+            --channel unlisted \
+            --api-key "${{ secrets.FIREFOX_JWT_ISSUER }}" \
+            --api-secret "${{ secrets.FIREFOX_JWT_SECRET }}" \
+            --timeout 120000
+        env:
+          FIREFOX_JWT_ISSUER: ${{ secrets.FIREFOX_JWT_ISSUER }}
+          FIREFOX_JWT_SECRET: ${{ secrets.FIREFOX_JWT_SECRET }}
+
       - name: Generate clean release notes
         run: |
           NOTES=$(gh api repos/${{ github.repository }}/releases/generate-notes -f tag_name=${{ github.ref_name }} --jq '.body')
@@ -52,4 +66,5 @@ jobs:
         with:
           files: |
             .output/*.zip
+            .output/*.xpi
           body_path: notes.md
