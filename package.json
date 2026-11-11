@@ -2,7 +2,7 @@
   "name": "octa-blaster",
   "description": "Extensão para envio de respostas rápidas em tickets de helpdesk",
   "private": true,
-  "version": "0.5.2",
+  "version": "0.5.2.2",
   "type": "module",
   "license": "AGPL-3.0-or-later",
   "scripts": {
