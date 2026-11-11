@@ -1,10 +1,31 @@
-# 🐙 OctaBlaster - Respostas Rápidas & Automação para Octadesk
+<p align="center">
+  <img src="public/icon.svg" width="128" height="128" alt="OctaBlaster Logo" />
+</p>
 
-> **Versão**: `0.4.0`
+<h1 align="center">OctaBlaster</h1>
 
-Extensão moderna para navegadores web construída com **WXT (Next-gen Web Extension Framework)**, **TypeScript** e **Vue 3**, com suporte nativo e ultra-otimizado para o **Firefox** (incluindo Painel Lateral / Sidebar) e Chromium (Chrome, Edge, Brave, Opera).
+<p align="center">
+  <strong>Respostas Rápidas & Automação Inteligente de Licenças para Octadesk</strong>
+</p>
 
-Projetada especificamente para equipes de atendimento e suporte que utilizam o **Octadesk**, integrando respostas prontas, injeção inteligente de texto e **automação de tickets de licenças**.
+<p align="center">
+  <a href="https://github.com/luizGDpulz/octa-blaster/releases"><img src="https://img.shields.io/github/v/release/luizGDpulz/octa-blaster?color=ffc600&label=release&logo=github&style=flat-square" alt="GitHub Release" /></a>
+  <a href="https://github.com/luizGDpulz/octa-blaster/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/luizGDpulz/octa-blaster/ci.yml?branch=main&label=ci&logo=githubactions&logoColor=white&style=flat-square" alt="CI Status" /></a>
+  <img src="https://img.shields.io/badge/browsers-Firefox%20%7C%20Chromium-3c3f43?style=flat-square&logo=firefox-browser&logoColor=white" alt="Suporte a Navegadores" />
+  <img src="https://img.shields.io/badge/framework-WXT-blueviolet?style=flat-square" alt="WXT" />
+  <img src="https://img.shields.io/badge/UI-Vue%203-42b883?style=flat-square&logo=vue.js&logoColor=white" alt="Vue 3" />
+  <img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/pnpm-fast-f69220?style=flat-square&logo=pnpm&logoColor=white" alt="pnpm" />
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/luizGDpulz/octa-blaster?color=3c3f43&style=flat-square" alt="Licença GPL-3.0" /></a>
+</p>
+
+---
+
+## 📌 Visão Geral
+
+Extensão moderna para navegadores web construída com **WXT (Next-gen Web Extension Framework)**, **TypeScript** e **Vue 3**, com suporte nativo e ultra-otimizado para o **Firefox** (incluindo assinatura digital `.xpi` permanente e Painel Lateral / Sidebar) e plataformas Chromium (Chrome, Edge, Brave, Opera).
+
+Projetada especificamente para equipes de atendimento e suporte que utilizam o **Octadesk**, integrando respostas prontas, injeção inteligente de texto, variáveis dinâmicas de saudação e **automação de tickets de licenças** com isolamento estrito entre chamados concorrentes.
 
 ---
 
@@ -17,6 +38,7 @@ Projetada especificamente para equipes de atendimento e suporte que utilizam o *
 - **Gerenciador de Pacotes**: **pnpm**
 - **Armazenamento**: `browser.storage.local` (assíncrono e persistente)
 - **Painel Lateral Firefox**: Suporte nativo a `sidebar_action`
+- **Painel Lateral Chromium**: Suporte integrado a `side_panel` (MV3)
 
 ---
 
@@ -67,9 +89,9 @@ Projetada especificamente para equipes de atendimento e suporte que utilizam o *
 ### 8. 🛡️ Trava de Idempotência Anti-Duplicação
 - Previne colagens múltiplas acidentais causadas por múltiplos frames (`iframe.embedded__app_GUiYT`) ou cliques repetidos.
 
-### 9. 🐙 Identidade Visual Octadesk
-- Ícone oficial do Octadesk com cor `#ffc600` incorporado em todos os tamanhos (16px, 32px, 48px, 96px, 128px e SVG).
-- Aplicado diretamente no cabeçalho do popup, no widget flutuante da tela e no manifesto da extensão.
+### 9. 🐙 Identidade Visual & Ícones
+- Logotipo oficial com cor `#ffc600` em múltiplos formatos: vetor SVG (`public/icon.svg`), Windows ICO / Favicon (`public/icon.ico` e `public/favicon.ico`) e resoluções rasterizadas em PNG (16px, 32px, 48px, 96px, 128px e 256px).
+- Aplicado diretamente no cabeçalho do popup, no widget flutuante in-page e no manifesto da extensão.
 
 ---
 
@@ -80,7 +102,7 @@ Projetada especificamente para equipes de atendimento e suporte que utilizam o *
 pnpm install
 ```
 
-### 2. Gerar / atualizar ícones PNG a partir do SVG
+### 2. Gerar / atualizar ícones (PNG e ICO) a partir do SVG
 ```bash
 pnpm generate:icons
 ```
@@ -102,6 +124,12 @@ pnpm build:firefox
 ```
 A saída pronta para carregar será gerada na pasta `.output/firefox-mv2`.
 
+### 6. Gerar build de produção para Chromium (Chrome / Edge)
+```bash
+pnpm build
+```
+A saída pronta para carregar será gerada na pasta `.output/chrome-mv3`.
+
 ---
 
 ## 📦 Instalação Rápida via GitHub Releases (Sem Compilar Localmente)
@@ -111,14 +139,15 @@ A saída pronta para carregar será gerada na pasta `.output/firefox-mv2`.
 Você não precisa ter Node.js ou pnpm instalado para rodar o OctaBlaster no seu computador de uso diário! Basta baixar os pacotes pré-compilados:
 
 1. Acesse a aba de [Releases do Repositório](https://github.com/luizGDpulz/octa-blaster/releases).
-2. Baixe o arquivo `.zip` da versão desejada:
-   - Para **Firefox**: baixe `octa-blaster-<versao>-firefox.zip`.
-   - Para **Chrome / Edge / Brave**: baixe `octa-blaster-<versao>-chrome.zip`.
-3. Para carregar no navegador:
+2. Escolha o instalador de acordo com o navegador:
+   - **Firefox (Instalação Definitiva com 1 Clique)**: baixe o arquivo assinado digitalmente **`.xpi`** (ex: `octablaster-<versao>.xpi`). O Firefox abrirá o aviso de instalação imediatamente, sem necessitar de modo desenvolvedor nem expirar.
+   - **Firefox (Modo Dev / Pasta Extraída)**: baixe `octa-blaster-<versao>-firefox.zip`.
+   - **Chrome / Edge / Brave**: baixe `octa-blaster-<versao>-chrome.zip`.
+3. Para carregar pacotes `.zip` em modo desenvolvedor:
    - **Firefox**:
      - Acesse `about:debugging#/runtime/this-firefox`.
      - Clique em **"Carregar extensão temporária..."** (*Load Temporary Add-on...*).
-     - Selecione o arquivo `manifest.json` dentro da pasta descompactada (ou o próprio `.zip`).
+     - Selecione o arquivo `manifest.json` dentro da pasta descompactada.
    - **Chrome / Edge / Brave**:
      - Acesse `chrome://extensions`.
      - Ative o **"Modo do desenvolvedor"** no canto superior direito.
