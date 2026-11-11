@@ -1,0 +1,17 @@
+changelog:
+  exclude:
+    labels:
+      - skip-changelog
+    authors:
+      - dependabot[bot]
+      - github-actions[bot]
+  categories:
+    - title: "🚀 Novidades & Funcionalidades"
+      labels:
+        - enhancement
+    - title: "🐛 Correções & Estabilidade"
+      labels:
+        - bug
+    - title: "🧰 Outras Alterações"
+      labels:
+        - "*"

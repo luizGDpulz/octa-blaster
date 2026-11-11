@@ -39,9 +39,17 @@ jobs:
       - name: Build & Zip for Firefox MV2
         run: pnpm zip:firefox
 
+      - name: Generate clean release notes
+        run: |
+          NOTES=$(gh api repos/${{ github.repository }}/releases/generate-notes -f tag_name=${{ github.ref_name }} --jq '.body')
+          CLEAN_NOTES=$(echo "$NOTES" | sed '/## New Contributors/,/^\*\*Full Changelog\*\*/ { /^\*\*Full Changelog\*\*/!d }')
+          echo "$CLEAN_NOTES" > notes.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             .output/*.zip
-          generate_release_notes: true
+          body_path: notes.md
