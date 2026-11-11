@@ -8,24 +8,30 @@ Este guia é para você e para qualquer membro da equipe que queira instalar ou 
 
 O Firefox oferece o melhor suporte ao OctaBlaster devido à integração nativa com o **Painel Lateral (Sidebar)**.
 
-### 📥 Passo 1: Baixar a versão pronta
+### 🌟 Opção A: Instalação Definitiva com 1 Clique (Arquivo `.xpi` Assinado)
+
+A partir da versão com assinatura digital, a instalação é permanente e não expira:
+
 1. Acesse a página de [Releases do OctaBlaster no GitHub](https://github.com/luizGDpulz/octa-blaster/releases).
-2. Na versão mais recente (ex: `v0.4.0`), clique no arquivo:
-   👉 **`octa-blaster-X.X.X-firefox.zip`**
-3. Salve o arquivo `.zip` em uma pasta de sua preferência (ex: em `Downloads` ou em uma pasta `Extensoes`).
-4. **Extraia o arquivo .zip** (clique com botão direito -> *Extrair tudo...*).
+2. Na versão mais recente, clique no arquivo **`.xpi`** (ex: `octablaster-X.X.X.xpi` ou similar).
+3. O Firefox abrirá uma janela nativa:
+   👉 *"Adicionar OctaBlaster?"* -> Clique em **Adicionar**.
+4. Marque a caixa para permitir navegação em janelas privativas se desejar e clique em **OK**.
+5. Pronto! A extensão está instalada de forma definitiva e permanente.
 
 ---
 
-### 🚀 Passo 2: Carregar a Extensão no Firefox
-1. Abra uma nova aba no Firefox e digite na barra de endereços:
+### 📦 Opção B: Instalação Manual via Arquivo `.zip` (Temporária / Modo Dev)
+
+Caso prefira carregar os arquivos descompactados:
+
+1. Na página de Releases, baixe o arquivo: 👉 **`octa-blaster-X.X.X-firefox.zip`**.
+2. Extraia o `.zip` em uma pasta no seu computador.
+3. No Firefox, digite na barra de endereços:
    ```text
    about:debugging#/runtime/this-firefox
    ```
-   *(Ou acesse: Menu do Firefox ☰ -> Mais ferramentas -> Depuração de extensões)*
-2. No topo da página, clique no botão **"Carregar extensão temporária..."** (*Load Temporary Add-on...*).
-3. Navegue até a pasta onde você descompactou o zip e selecione o arquivo **`manifest.json`** (ou selecione o próprio arquivo `.zip`).
-4. Pronto! O OctaBlaster aparecerá na lista de extensões ativas.
+4. Clique em **"Carregar extensão temporária..."** e selecione o arquivo `manifest.json` da pasta extraída.
 
 ---
 

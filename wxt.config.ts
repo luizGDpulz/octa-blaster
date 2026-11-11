@@ -11,7 +11,7 @@ export default defineConfig({
     host_permissions: ['*://app.octadesk.com/*', '*://*.octadesk.com/*'],
     browser_specific_settings: {
       gecko: {
-        id: 'octablaster@local.extension',
+        id: 'octablaster@pulz.dev.br',
       },
     },
     // Toolbar Popup nativo do Firefox
