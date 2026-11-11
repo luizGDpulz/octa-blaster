@@ -24,3 +24,15 @@ body {
   box-sizing: border-box !important;
   overflow: hidden !important;
 }
+
+.header {
+  background: #23222b !important;
+  border-top: none !important;
+  justify-content: flex-end !important;
+  padding: 4px 12px 8px 12px !important;
+  min-height: 38px !important;
+}
+
+.brand {
+  display: none !important;
+}
