@@ -34,7 +34,7 @@ O Firefox oferece o melhor suporte ao OctaBlaster devido à integração nativa 
 2. Localize o **OctaBlaster** e clique no ícone da engrenagem ⚙️ -> **"Fixar na barra de ferramentas"**.
 3. **Para abrir o Painel Lateral fixo (Sidebar):**
    - Pressione o atalho: `Ctrl + B` (ou clique no menu *Exibir* -> *Painel Lateral* -> *OctaBlaster*).
-   - Ou clique no ícone da extensão no topo e clique no botão **"📌 Painel"**.
+   - Ou clique no ícone da extensão no topo, abra o menu de opções (`...`) e selecione **"Abrir no Painel Lateral"**.
    - O painel ficará fixo na lateral esquerda ou direita enquanto você atende tickets, sem fechar ao clicar na tela!
 4. **No chamado do Octadesk:**
    - Acesse qualquer ticket em `app.octadesk.com`.
