@@ -6,7 +6,7 @@ export default defineConfig({
   manifest: {
     name: 'OctaBlaster - Respostas Rápidas Octadesk',
     description: 'Respostas prontas automatizadas, injeção rápida de texto e automação de licenças para tickets no Octadesk',
-    version: '0.5.5',
+    version: '0.5.6',
     permissions: ['storage', 'activeTab', 'tabs'],
     host_permissions: ['*://app.octadesk.com/*', '*://*.octadesk.com/*'],
     browser_specific_settings: {
@@ -25,7 +25,7 @@ export default defineConfig({
     },
     // Suporte ao Painel Lateral nativo do Firefox (Sidebar Action)
     sidebar_action: {
-      default_title: '🐙 OctaBlaster',
+      default_title: 'OctaBlaster',
       default_panel: 'sidepanel.html',
       default_icon: {
         16: 'icon/16.png',
@@ -36,7 +36,7 @@ export default defineConfig({
   hooks: {
     'build:manifestGenerated': (_wxt, manifest) => {
       if (manifest.sidebar_action) {
-        (manifest.sidebar_action as any).default_title = '🐙 OctaBlaster';
+        (manifest.sidebar_action as any).default_title = 'OctaBlaster';
         (manifest.sidebar_action as any).default_icon = {
           16: 'icon/16.png',
           32: 'icon/32.png',
