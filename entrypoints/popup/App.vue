@@ -102,6 +102,85 @@ async function resetToDefaults() {
   setStatus('Modelos padrão de inatividade restaurados!', 'success');
 }
 
+const fileInputRef = ref<HTMLInputElement | null>(null);
+
+function exportTemplates() {
+  try {
+    const dataStr = JSON.stringify(templates.value, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `octablaster-templates-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setStatus('Modelos exportados com sucesso!', 'success');
+  } catch (err) {
+    console.error('Erro ao exportar modelos:', err);
+    setStatus('Falha ao exportar modelos.', 'error');
+  }
+}
+
+function triggerImport() {
+  fileInputRef.value?.click();
+}
+
+async function handleFileImport(e: Event) {
+  const target = e.target as HTMLInputElement;
+  const file = target.files?.[0];
+  if (!file) return;
+
+  try {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+
+    if (!Array.isArray(parsed)) {
+      setStatus('Arquivo inválido: o formato deve ser uma lista de modelos.', 'error');
+      return;
+    }
+
+    const validItems: QuickReplyTemplate[] = [];
+    for (const item of parsed) {
+      if (typeof item === 'object' && item !== null && typeof item.title === 'string' && typeof item.content === 'string') {
+        validItems.push({
+          id: typeof item.id === 'string' ? item.id : `tpl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          title: item.title.trim(),
+          content: item.content,
+          category: typeof item.category === 'string' ? item.category.trim() : undefined,
+          updatedAt: typeof item.updatedAt === 'number' ? item.updatedAt : Date.now(),
+        });
+      }
+    }
+
+    if (validItems.length === 0) {
+      setStatus('Nenhum modelo válido encontrado no arquivo JSON.', 'error');
+      return;
+    }
+
+    // Mescla itens evitando duplicidade de ID
+    let importedCount = 0;
+    for (const item of validItems) {
+      const existingIdx = templates.value.findIndex((t) => t.id === item.id);
+      if (existingIdx !== -1) {
+        templates.value[existingIdx] = item;
+      } else {
+        templates.value.push(item);
+      }
+      importedCount++;
+    }
+
+    await saveTemplates();
+    setStatus(`${importedCount} modelos importados com sucesso!`, 'success');
+  } catch (err) {
+    console.error('Erro ao importar modelos:', err);
+    setStatus('Erro ao ler ou processar arquivo JSON.', 'error');
+  } finally {
+    target.value = '';
+  }
+}
+
 function startCreate() {
   editingId.value = null;
   formTitle.value = '';
@@ -521,9 +600,24 @@ onMounted(() => {
       <div class="footer-hint">
         Use <code v-pre>{{Saudacao}}</code> para alternar Bom dia / Boa tarde!
       </div>
-      <button class="btn-restore" title="Restaurar modelos padrão" @click="resetToDefaults">
-        🔄 Padrões
-      </button>
+      <div class="footer-actions">
+        <button class="btn-footer-link" title="Exportar modelos para arquivo JSON" @click="exportTemplates">
+          📤 Exportar
+        </button>
+        <button class="btn-footer-link" title="Importar modelos de arquivo JSON" @click="triggerImport">
+          📥 Importar
+        </button>
+        <button class="btn-restore" title="Restaurar modelos padrão" @click="resetToDefaults">
+          🔄 Padrões
+        </button>
+      </div>
+      <input
+        ref="fileInputRef"
+        type="file"
+        accept="application/json,.json"
+        style="display: none"
+        @change="handleFileImport"
+      />
     </footer>
   </div>
 </template>
@@ -1030,6 +1124,29 @@ textarea {
   padding: 1px 4px;
   border-radius: 3px;
   font-size: 10px;
+}
+
+.footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-footer-link {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.btn-footer-link:hover {
+  color: var(--text-primary);
+  background: rgba(0, 0, 0, 0.05);
 }
 
 .btn-restore {
