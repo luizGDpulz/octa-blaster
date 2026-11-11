@@ -21,7 +21,11 @@ import {
   CheckCircle2,
   AlertCircle,
   Info,
+  RefreshCw,
+  Sparkles,
+  ExternalLink,
 } from 'lucide-vue-next';
+import { checkGithubRelease, type UpdateInfo } from '@/utils/updateChecker';
 
 const STORAGE_KEY = 'octablaster_quick_replies_v2';
 const HAS_INITIALIZED_KEY = 'octablaster_initialized_v2';
@@ -78,6 +82,39 @@ const isMenuOpen = ref(false);
 const menuRef = ref<HTMLElement | null>(null);
 const showConfirmResetModal = ref(false);
 const appVersion = ref('0.4.0');
+
+const isCheckingUpdate = ref(false);
+const updateInfo = ref<UpdateInfo | null>(null);
+const showUpdateModal = ref(false);
+
+async function checkForUpdates() {
+  if (isCheckingUpdate.value) return;
+  isCheckingUpdate.value = true;
+  setStatus('Verificando atualizações no GitHub...', 'info');
+
+  try {
+    const res = await checkGithubRelease(appVersion.value);
+    if (res.hasUpdate) {
+      updateInfo.value = res;
+      showUpdateModal.value = true;
+      setStatus(`Nova versão v${res.latestVersion} disponível!`, 'info');
+    } else {
+      setStatus(`Você já está na versão mais recente (v${appVersion.value})!`, 'success');
+    }
+  } catch (err: any) {
+    console.error('Falha ao verificar atualizações:', err);
+    setStatus(err.message || 'Não foi possível verificar atualizações.', 'error');
+  } finally {
+    isCheckingUpdate.value = false;
+  }
+}
+
+function openUpdateRelease() {
+  if (updateInfo.value?.releaseUrl) {
+    browser.tabs.create({ url: updateInfo.value.releaseUrl });
+    showUpdateModal.value = false;
+  }
+}
 
 function setStatus(msg: string, type: 'success' | 'error' | 'info' = 'info') {
   statusMessage.value = msg;
@@ -464,6 +501,9 @@ function handleKeydown(event: KeyboardEvent) {
     if (showConfirmResetModal.value) {
       cancelResetDefaults();
     }
+    if (showUpdateModal.value) {
+      showUpdateModal.value = false;
+    }
   }
 }
 
@@ -571,6 +611,20 @@ onUnmounted(() => {
                 >
                   <RotateCcw :size="14" class="menu-item-icon" />
                   <span class="menu-item-text">Restaurar modelos padrão</span>
+                </button>
+              </div>
+
+              <div class="menu-divider"></div>
+
+              <div class="menu-section">
+                <button
+                  type="button"
+                  class="menu-item"
+                  :disabled="isCheckingUpdate"
+                  @click="handleMenuAction(checkForUpdates)"
+                >
+                  <RefreshCw :size="14" class="menu-item-icon" :class="{ 'spin-icon': isCheckingUpdate }" />
+                  <span class="menu-item-text">{{ isCheckingUpdate ? 'Verificando...' : 'Verificar atualizações' }}</span>
                 </button>
               </div>
             </div>
@@ -791,6 +845,35 @@ onUnmounted(() => {
             </button>
             <button type="button" class="btn-primary" @click="confirmResetDefaults">
               Restaurar
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- Modal de Nova Versão Disponível Estilo Notion -->
+    <transition name="fade">
+      <div v-if="showUpdateModal && updateInfo" class="modal-backdrop" @click.self="showUpdateModal = false">
+        <div class="notion-modal">
+          <div class="notion-modal-header">
+            <div class="modal-icon-badge modal-icon-update">
+              <Sparkles :size="16" :stroke-width="2" />
+            </div>
+            <h3 class="modal-title">Nova versão disponível!</h3>
+          </div>
+          <p class="modal-body">
+            O <strong>OctaBlaster v{{ updateInfo.latestVersion }}</strong> já está disponível no GitHub. Você está atualmente utilizando a versão <strong>v{{ updateInfo.currentVersion }}</strong>.
+          </p>
+          <div v-if="updateInfo.releaseNotes" class="modal-notes-preview">
+            {{ updateInfo.releaseNotes }}
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn-secondary" @click="showUpdateModal = false">
+              Mais tarde
+            </button>
+            <button type="button" class="btn-primary btn-update-action" @click="openUpdateRelease">
+              <ExternalLink :size="13" :stroke-width="2" />
+              <span>Ver Release</span>
             </button>
           </div>
         </div>
@@ -1479,6 +1562,30 @@ textarea {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 4px;
+}
+
+.modal-icon-update {
+  background: rgba(255, 198, 0, 0.25);
+  color: #1c1b1c;
+}
+
+.modal-notes-preview {
+  font-size: 11px;
+  line-height: 1.4;
+  color: #5b5f63;
+  background: #f7f8f9;
+  border: 1px solid #dee0e4;
+  border-radius: 6px;
+  padding: 8px;
+  max-height: 80px;
+  overflow-y: auto;
+  white-space: pre-line;
+}
+
+.btn-update-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
 /* Utilitários e animações */
