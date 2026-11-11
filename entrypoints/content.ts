@@ -10,7 +10,7 @@ export default defineContentScript({
   matchAboutBlank: true,
   runAt: 'document_idle',
   main() {
-    console.log('[OctaBlaster v0.3.8] Content script inicializado no frame:', window.location.href);
+    console.log('[OctaBlaster] Content script inicializado no frame:', window.location.href);
     let lastActiveInput: HTMLElement | null = null;
     const processedRequests = new Set<string>();
 
@@ -709,10 +709,17 @@ export default defineContentScript({
             const itemBtn = doc.createElement('button');
             itemBtn.type = 'button';
             itemBtn.className = 'octa-dropdown-item';
-            itemBtn.innerHTML = `
-              <span class="octa-item-title">${tpl.title}</span>
-              <div class="octa-item-preview">${tpl.content.replace(/\n/g, ' ')}</div>
-            `;
+
+            const titleEl = doc.createElement('span');
+            titleEl.className = 'octa-item-title';
+            titleEl.textContent = tpl.title;
+
+            const previewEl = doc.createElement('div');
+            previewEl.className = 'octa-item-preview';
+            previewEl.textContent = tpl.content.replace(/\n/g, ' ');
+
+            itemBtn.appendChild(titleEl);
+            itemBtn.appendChild(previewEl);
 
             itemBtn.addEventListener('mousedown', (e) => {
               e.preventDefault();
@@ -729,7 +736,12 @@ export default defineContentScript({
                 insertTextIntoElement(target, processed, reqId);
                 dropdownMenu.style.display = 'none';
               } else {
-                alert('Campo de texto do ticket não encontrado.');
+                const prevText = btnReplies.textContent;
+                btnReplies.textContent = '⚠️ Selecione o editor';
+                setTimeout(() => {
+                  btnReplies.textContent = prevText || '📋 Respostas';
+                }, 2500);
+                dropdownMenu.style.display = 'none';
               }
             });
 
@@ -867,7 +879,7 @@ export default defineContentScript({
     }
 
     function startWhenReady() {
-      console.log('[OctaBlaster v0.3.7] Aguardando estabilização do carregamento da página...');
+      console.log('[OctaBlaster] Aguardando estabilização do carregamento da página...');
       const start = () => {
         setTimeout(initWidgetLifecycle, 1200);
       };
