@@ -345,6 +345,7 @@ async function triggerLicenseMentions() {
 
     const res = (await browser.tabs.sendMessage(tab.id, {
       action: 'AUTOMATE_LICENSE_MENTIONS',
+      force: !!detectedLicense.value,
     })) as InsertMessageResponse | undefined;
 
     if (res?.success) {

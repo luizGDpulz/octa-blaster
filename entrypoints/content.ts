@@ -148,7 +148,7 @@ export default defineContentScript({
           return true;
         }
 
-        // Ação 2: Automação completa de menção de licença (@Jorge e @Roberto)
+        // Ação 2: Automação completa de menção de responsáveis (@Jorge e @Roberto)
         if (req.action === 'AUTOMATE_LICENSE_MENTIONS') {
           const target = findBestEditableElement();
           if (!target) {
@@ -156,7 +156,20 @@ export default defineContentScript({
             return true;
           }
 
-          automateLicenseMentions(target, document).then((result) => {
+          if (!req.force) {
+            const info = detectLicenseTicket(target);
+            if (!info?.isLicenseTicket) {
+              const proceed = window.confirm(
+                'Este chamado não parece ser um ticket de licença.\n\nDeseja realmente prosseguir com a marcação dos responsáveis em Anotação Interna?',
+              );
+              if (!proceed) {
+                sendResponse({ success: false, error: 'Operação cancelada pelo usuário.' });
+                return true;
+              }
+            }
+          }
+
+          automateLicenseMentions(target, document, null, req.targets).then((result) => {
             sendResponse(result);
           });
           return true;
@@ -583,8 +596,8 @@ export default defineContentScript({
           </button>
           
           <div class="octa-bar-actions">
-            <!-- Botão de licença inserido dinamicamente se detectado -->
-            <button type="button" class="octa-action-btn octa-license-btn octa-btn-license" style="display: none;" title="Mudar para anotação interna e marcar @Jorge Tigre e @Roberto Renck">
+            <!-- Botão de licença acessível sob demanda -->
+            <button type="button" class="octa-action-btn octa-license-btn octa-btn-license" title="Mudar para anotação interna e marcar responsáveis de licença">
               🏷️ Marcar Licenças
             </button>
 
@@ -607,7 +620,6 @@ export default defineContentScript({
       `;
 
       const btnToggle = widget.querySelector('.octa-btn-toggle') as HTMLElement;
-      const licenseBadge = widget.querySelector('.octa-license-badge') as HTMLElement;
       const btnLicense = widget.querySelector('.octa-btn-license') as HTMLElement;
       const btnReplies = widget.querySelector('.octa-btn-replies') as HTMLElement;
       const btnMinimize = widget.querySelector('.octa-btn-minimize') as HTMLElement;
@@ -624,11 +636,9 @@ export default defineContentScript({
         widget.dataset.expanded = expanded ? 'true' : 'false';
         if (expanded) {
           btnToggle.title = 'OctaBlaster';
-          updateLicenseButton(widget, container);
         } else {
           dropdownMenu.style.display = 'none';
           btnToggle.title = 'OctaBlaster (Clique para expandir)';
-          updateLicenseButton(widget, container);
         }
       }
 
@@ -664,19 +674,42 @@ export default defineContentScript({
       btnLicense.addEventListener('click', async (e) => {
         e.preventDefault();
         e.stopPropagation();
+
+        // 1. Validação sob demanda do tipo de ticket
+        const info = detectLicenseTicket(container);
+        const isLicense = !!(info && info.isLicenseTicket);
+
+        if (!isLicense) {
+          const proceed = window.confirm(
+            'Este chamado não parece ser um ticket de licença.\n\nDeseja realmente prosseguir com a marcação dos responsáveis em Anotação Interna?',
+          );
+          if (!proceed) {
+            return;
+          }
+        }
+
+        const originalText = btnLicense.textContent || '🏷️ Marcar Licenças';
         btnLicense.textContent = '⏳ Marcando...';
         btnLicense.style.opacity = '0.7';
 
-        const localEditor = findEditorForWidget(widget, container);
-        const targetDoc = localEditor?.ownerDocument || doc;
-        const res = await automateLicenseMentions(localEditor, targetDoc, container);
-        if (res.success) {
-          btnLicense.textContent = '✅ Marcados!';
-        } else {
-          btnLicense.textContent = '❌ Tente novamente';
+        try {
+          const localEditor = findEditorForWidget(widget, container);
+          const targetDoc = localEditor?.ownerDocument || doc;
+          const res = await automateLicenseMentions(localEditor, targetDoc, container);
+          if (res.success) {
+            btnLicense.textContent = '✅ Marcados!';
+          } else {
+            btnLicense.textContent = '❌ Falha ao marcar';
+          }
+        } catch (err) {
+          console.error('[OctaBlaster] Erro ao marcar responsáveis:', err);
+          btnLicense.textContent = '❌ Erro';
+        } finally {
+          setTimeout(() => {
+            btnLicense.textContent = originalText;
+            btnLicense.style.opacity = '1';
+          }, 2500);
         }
-
-        setTimeout(() => updateLicenseButton(widget, container), 2500);
       });
 
       // Dropdown de respostas rápidas
@@ -772,48 +805,6 @@ export default defineContentScript({
     }
 
     /**
-     * Atualiza o estado do botão de licença especificamente para o ticket a que pertence
-     */
-    function updateLicenseButton(widget: HTMLElement, container: HTMLElement) {
-      const btnLicense = widget.querySelector('.octa-btn-license') as HTMLElement | null;
-      const licenseBadge = widget.querySelector('.octa-license-badge') as HTMLElement | null;
-      if (!btnLicense) return;
-
-      const info = detectLicenseTicket(container);
-      const isLicense = !!(info && info.isLicenseTicket);
-
-      if (isLicense) {
-        const typeLabel = info.type !== 'Outro' ? info.type : 'Licença';
-        const newText = `🏷️ Marcar (${typeLabel})`;
-        if (btnLicense.textContent !== newText) {
-          btnLicense.textContent = newText;
-        }
-        btnLicense.style.setProperty('display', 'inline-flex', 'important');
-
-        if (licenseBadge) {
-          licenseBadge.classList.add('is-active');
-        }
-        if (widget.dataset.expanded !== 'true') {
-          const btnToggle = widget.querySelector('.octa-btn-toggle') as HTMLElement | null;
-          if (btnToggle) {
-            btnToggle.title = `OctaBlaster - Ticket de Licença (${typeLabel}) detectado! (Clique para expandir)`;
-          }
-        }
-      } else {
-        btnLicense.style.setProperty('display', 'none', 'important');
-        if (licenseBadge) {
-          licenseBadge.classList.remove('is-active');
-        }
-        if (widget.dataset.expanded !== 'true') {
-          const btnToggle = widget.querySelector('.octa-btn-toggle') as HTMLElement | null;
-          if (btnToggle) {
-            btnToggle.title = 'OctaBlaster (Clique para expandir)';
-          }
-        }
-      }
-    }
-
-    /**
      * Ciclo de vida: verifica e anexa o widget em cada ticket aberto na tela
      */
     function updateWidgetLifecycle() {
@@ -846,25 +837,25 @@ export default defineContentScript({
           const existingWidget = widgetsInContainer[0];
 
           if (existingWidget && existingWidget.isConnected) {
-            updateLicenseButton(existingWidget, container);
-          } else {
-            const win = targetDoc.defaultView || window;
-            const compPos = win.getComputedStyle(container).position;
-            if (compPos === 'static') {
-              container.style.position = 'relative';
-            }
-            container.style.overflow = 'visible';
-
-            const parentBox = container.closest('.box, .box-white, .box-bordered') as HTMLElement | null;
-            if (parentBox) {
-              parentBox.style.overflow = 'visible';
-            }
-
-            ensureWidgetStyles(targetDoc);
-            const newWidget = createWidgetElement(targetDoc, container);
-            container.appendChild(newWidget);
-            updateLicenseButton(newWidget, container);
+            // Widget já devidamente acoplado e pronto para uso sob demanda
+            continue;
           }
+
+          const win = targetDoc.defaultView || window;
+          const compPos = win.getComputedStyle(container).position;
+          if (compPos === 'static') {
+            container.style.position = 'relative';
+          }
+          container.style.overflow = 'visible';
+
+          const parentBox = container.closest('.box, .box-white, .box-bordered') as HTMLElement | null;
+          if (parentBox) {
+            parentBox.style.overflow = 'visible';
+          }
+
+          ensureWidgetStyles(targetDoc);
+          const newWidget = createWidgetElement(targetDoc, container);
+          container.appendChild(newWidget);
         }
       }
     }
