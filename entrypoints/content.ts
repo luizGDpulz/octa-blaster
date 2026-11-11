@@ -869,13 +869,80 @@ export default defineContentScript({
       }
     }
 
-    function initWidgetLifecycle() {
-      updateWidgetLifecycle();
-      window.setInterval(updateWidgetLifecycle, 800);
+    let lifecycleDebounceTimeout: number | undefined;
+    function scheduleWidgetUpdate(delay: number = 200) {
+      if (lifecycleDebounceTimeout) {
+        clearTimeout(lifecycleDebounceTimeout);
+      }
+      lifecycleDebounceTimeout = window.setTimeout(() => {
+        updateWidgetLifecycle();
+      }, delay);
+    }
 
-      window.addEventListener('popstate', () => setTimeout(updateWidgetLifecycle, 400));
-      window.addEventListener('hashchange', () => setTimeout(updateWidgetLifecycle, 400));
-      window.addEventListener('click', () => setTimeout(updateWidgetLifecycle, 350));
+    function initWidgetLifecycle() {
+      // Execução imediata inicial
+      updateWidgetLifecycle();
+
+      // Observador reativo de mutações no DOM (substitui polling agressivo)
+      try {
+        const observer = new MutationObserver((mutations) => {
+          let hasRelevantChange = false;
+          for (const m of mutations) {
+            // Ignora mutações provocadas pelo próprio widget do OctaBlaster
+            for (const node of Array.from(m.addedNodes)) {
+              if (
+                node.nodeType === 1 &&
+                !(node as HTMLElement).classList?.contains('octablaster-floating-widget') &&
+                !(node as HTMLElement).id?.includes('octablaster')
+              ) {
+                hasRelevantChange = true;
+                break;
+              }
+            }
+            if (hasRelevantChange) break;
+
+            for (const node of Array.from(m.removedNodes)) {
+              if (
+                node.nodeType === 1 &&
+                !(node as HTMLElement).classList?.contains('octablaster-floating-widget')
+              ) {
+                hasRelevantChange = true;
+                break;
+              }
+            }
+            if (hasRelevantChange) break;
+          }
+
+          if (hasRelevantChange) {
+            scheduleWidgetUpdate(200);
+          }
+        });
+
+        const targetNode = document.body || document.documentElement;
+        if (targetNode) {
+          observer.observe(targetNode, {
+            childList: true,
+            subtree: true,
+          });
+        }
+      } catch (err) {
+        console.warn('[OctaBlaster] Falha ao inicializar MutationObserver:', err);
+      }
+
+      // Eventos de navegação e clique
+      window.addEventListener('popstate', () => scheduleWidgetUpdate(300));
+      window.addEventListener('hashchange', () => scheduleWidgetUpdate(300));
+      window.addEventListener('click', () => scheduleWidgetUpdate(350));
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) scheduleWidgetUpdate(100);
+      });
+
+      // Salvaguarda leve em segundo plano (5s ao invés de 800ms)
+      window.setInterval(() => {
+        if (!document.hidden) {
+          updateWidgetLifecycle();
+        }
+      }, 5000);
     }
 
     function startWhenReady() {
