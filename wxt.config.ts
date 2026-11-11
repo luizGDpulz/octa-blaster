@@ -25,7 +25,7 @@ export default defineConfig({
     },
     // Suporte ao Painel Lateral nativo do Firefox (Sidebar Action)
     sidebar_action: {
-      default_title: 'OctaBlaster',
+      default_title: '🐙 OctaBlaster',
       default_panel: 'sidepanel.html',
       default_icon: {
         16: 'icon/16.png',
@@ -36,6 +36,7 @@ export default defineConfig({
   hooks: {
     'build:manifestGenerated': (_wxt, manifest) => {
       if (manifest.sidebar_action) {
+        (manifest.sidebar_action as any).default_title = '🐙 OctaBlaster';
         (manifest.sidebar_action as any).default_icon = {
           16: 'icon/16.png',
           32: 'icon/32.png',
