@@ -11,6 +11,7 @@
     "build:firefox": "wxt build -b firefox",
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
+    "sign:firefox": "web-ext sign --source-dir .output/firefox-mv2 --artifacts-dir .output --channel unlisted",
     "compile": "vue-tsc --noEmit",
     "generate:icons": "node scripts/generate-icons.js",
     "postinstall": "wxt prepare"
