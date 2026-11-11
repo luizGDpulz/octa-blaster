@@ -1,6 +1,6 @@
 # 🐙 OctaBlaster - Respostas Rápidas & Automação para Octadesk
 
-> **Versão**: `0.3.8`
+> **Versão**: `0.4.0`
 
 Extensão moderna para navegadores web construída com **WXT (Next-gen Web Extension Framework)**, **TypeScript** e **Vue 3**, com suporte nativo e ultra-otimizado para o **Firefox** (incluindo Painel Lateral / Sidebar) e Chromium (Chrome, Edge, Brave, Opera).
 
@@ -39,22 +39,30 @@ Projetada especificamente para equipes de atendimento e suporte que utilizam o *
   - `✕` (recolher)
 - **Totalmente Seguro contra Formulários**: Todos os botões possuem prevenção de eventos (`type="button"`, `stopPropagation`, `preventDefault`) para nunca disparar envio indevido de formulário.
 
-### 3. 🦊 Suporte ao Painel Lateral (Sidebar) do Firefox
-- Permite fixar o OctaBlaster na **barra lateral do Firefox** (sem fechar quando você clica na página).
-- Para abrir no Firefox:
-  - Pressione `Ctrl+B` (ou `Alt` -> menu *Exibir* -> *Painel Lateral* -> *OctaBlaster*), ou clique no ícone do painel lateral na barra de ferramentas.
+### 3. 🦊 Suporte ao Painel Lateral (Sidebar) no Firefox e Chromium
+- Permite fixar o OctaBlaster na **barra lateral do Firefox e navegadores Chromium** (sem fechar quando você clica na página).
+- **No Firefox**: Pressione `Ctrl+B` (ou menu *Exibir* -> *Painel Lateral* -> *OctaBlaster*), ou clique no botão `📌 Painel` no popup.
+- **No Chrome / Chromium (MV3)**: Clique diretamente no botão `📌 Painel` dentro do popup para expandir o Side Panel nativo.
 
-### 4. ☀️ Variável Inteligente `{{Saudacao}}`
+### 4. ☀️ Variáveis Dinâmicas Compartilhadas (`{{Saudacao}}`, `{{Data}}`, `{{Hora}}`)
+- Resolução centralizada tanto no popup quanto no widget in-page.
 - Detecta o horário de trabalho do atendente e preenche automaticamente:
   - **Manhã** (05:00 às 11:59): `Bom dia!`
   - **Tarde** (12:00 às 17:59): `Boa tarde!`
   - **Noite** (18:00 às 04:59): `Boa noite!`
-- Também suporta `{data}` e `{hora}`.
+- Também suporta `{data}` e `{hora}` formatadas no padrão brasileiro.
 
-### 5. 🛡️ Trava de Idempotência Anti-Duplicação
+### 5. 💾 Backup & Portabilidade: Exportação e Importação de Modelos (JSON)
+- Exporte todos os seus modelos de resposta em um arquivo `.json` com um clique no rodapé (`📤 Exportar`).
+- Importe seus modelos em outra máquina ou navegador (`📥 Importar`), com validação automática de esquema e mesclagem inteligente sem perda de dados.
+
+### 6. ⚡ Desempenho Otimizado com MutationObserver
+- Substitui loops de polling por um `MutationObserver` inteligente debouncado (200ms), reduzindo o uso de CPU e bateria em abas em segundo plano.
+
+### 7. 🛡️ Trava de Idempotência Anti-Duplicação
 - Previne colagens múltiplas acidentais causadas por múltiplos frames (`iframe.embedded__app_GUiYT`) ou cliques repetidos.
 
-### 6. 🐙 Identidade Visual Octadesk
+### 8. 🐙 Identidade Visual Octadesk
 - Ícone oficial do Octadesk com cor `#ffc600` incorporado em todos os tamanhos (16px, 32px, 48px, 96px, 128px e SVG).
 - Aplicado diretamente no cabeçalho do popup, no widget flutuante da tela e no manifesto da extensão.
 
@@ -88,6 +96,28 @@ pnpm compile
 pnpm build:firefox
 ```
 A saída pronta para carregar será gerada na pasta `.output/firefox-mv2`.
+
+---
+
+## 📦 Instalação Rápida via GitHub Releases (Sem Compilar Localmente)
+
+> 💡 **Guia Visual Completo para a Equipe:** Consulte o tutorial detalhado em [**docs/COMO-INSTALAR.md**](docs/COMO-INSTALAR.md).
+
+Você não precisa ter Node.js ou pnpm instalado para rodar o OctaBlaster no seu computador de uso diário! Basta baixar os pacotes pré-compilados:
+
+1. Acesse a aba de [Releases do Repositório](https://github.com/luizGDpulz/octa-blaster/releases).
+2. Baixe o arquivo `.zip` da versão desejada:
+   - Para **Firefox**: baixe `octa-blaster-<versao>-firefox.zip`.
+   - Para **Chrome / Edge / Brave**: baixe `octa-blaster-<versao>-chrome.zip`.
+3. Para carregar no navegador:
+   - **Firefox**:
+     - Acesse `about:debugging#/runtime/this-firefox`.
+     - Clique em **"Carregar extensão temporária..."** (*Load Temporary Add-on...*).
+     - Selecione o arquivo `manifest.json` dentro da pasta descompactada (ou o próprio `.zip`).
+   - **Chrome / Edge / Brave**:
+     - Acesse `chrome://extensions`.
+     - Ative o **"Modo do desenvolvedor"** no canto superior direito.
+     - Descompacte o arquivo `.zip` e clique em **"Carregar sem compactação"** (*Load unpacked*), selecionando a pasta extraída.
 
 ---
 

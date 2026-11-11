@@ -1,6 +1,7 @@
 import { insertTextIntoElement } from '@/utils/insertText';
 import { detectLicenseTicket, type LicenseTicketInfo } from '@/utils/licenseDetector';
 import { automateLicenseMentions, switchToInternalNote } from '@/utils/mentionHelper';
+import { resolveVariables } from '@/utils/templateResolver';
 import type { InsertMessageRequest, InsertMessageResponse, QuickReplyTemplate } from '@/types/template';
 
 export default defineContentScript({
@@ -9,7 +10,7 @@ export default defineContentScript({
   matchAboutBlank: true,
   runAt: 'document_idle',
   main() {
-    console.log('[OctaBlaster v0.3.8] Content script inicializado no frame:', window.location.href);
+    console.log('[OctaBlaster] Content script inicializado no frame:', window.location.href);
     let lastActiveInput: HTMLElement | null = null;
     const processedRequests = new Set<string>();
 
@@ -708,10 +709,17 @@ export default defineContentScript({
             const itemBtn = doc.createElement('button');
             itemBtn.type = 'button';
             itemBtn.className = 'octa-dropdown-item';
-            itemBtn.innerHTML = `
-              <span class="octa-item-title">${tpl.title}</span>
-              <div class="octa-item-preview">${tpl.content.replace(/\n/g, ' ')}</div>
-            `;
+
+            const titleEl = doc.createElement('span');
+            titleEl.className = 'octa-item-title';
+            titleEl.textContent = tpl.title;
+
+            const previewEl = doc.createElement('div');
+            previewEl.className = 'octa-item-preview';
+            previewEl.textContent = tpl.content.replace(/\n/g, ' ');
+
+            itemBtn.appendChild(titleEl);
+            itemBtn.appendChild(previewEl);
 
             itemBtn.addEventListener('mousedown', (e) => {
               e.preventDefault();
@@ -723,19 +731,17 @@ export default defineContentScript({
               e.stopPropagation();
               const target = findEditorForWidget(widget, container);
               if (target) {
-                const hour = new Date().getHours();
-                const greeting =
-                  hour >= 5 && hour < 12 ? 'Bom dia' : hour >= 12 && hour < 18 ? 'Boa tarde' : 'Boa noite';
-                const processed = tpl.content
-                  .replace(/(?:\{\{|\{)\s*sauda[cç][aã]o\s*(?:\}\}|\})!+/gi, `${greeting}!`)
-                  .replace(/(?:\{\{|\{)\s*sauda[cç][aã]o\s*(?:\}\}|\}),/gi, `${greeting},`)
-                  .replace(/(?:\{\{|\{)\s*sauda[cç][aã]o\s*(?:\}\}|\})/gi, `${greeting}!`);
-
+                const processed = resolveVariables(tpl.content);
                 const reqId = `widget_${Date.now()}`;
                 insertTextIntoElement(target, processed, reqId);
                 dropdownMenu.style.display = 'none';
               } else {
-                alert('Campo de texto do ticket não encontrado.');
+                const prevText = btnReplies.textContent;
+                btnReplies.textContent = '⚠️ Selecione o editor';
+                setTimeout(() => {
+                  btnReplies.textContent = prevText || '📋 Respostas';
+                }, 2500);
+                dropdownMenu.style.display = 'none';
               }
             });
 
@@ -863,17 +869,84 @@ export default defineContentScript({
       }
     }
 
-    function initWidgetLifecycle() {
-      updateWidgetLifecycle();
-      window.setInterval(updateWidgetLifecycle, 800);
+    let lifecycleDebounceTimeout: number | undefined;
+    function scheduleWidgetUpdate(delay: number = 200) {
+      if (lifecycleDebounceTimeout) {
+        clearTimeout(lifecycleDebounceTimeout);
+      }
+      lifecycleDebounceTimeout = window.setTimeout(() => {
+        updateWidgetLifecycle();
+      }, delay);
+    }
 
-      window.addEventListener('popstate', () => setTimeout(updateWidgetLifecycle, 400));
-      window.addEventListener('hashchange', () => setTimeout(updateWidgetLifecycle, 400));
-      window.addEventListener('click', () => setTimeout(updateWidgetLifecycle, 350));
+    function initWidgetLifecycle() {
+      // Execução imediata inicial
+      updateWidgetLifecycle();
+
+      // Observador reativo de mutações no DOM (substitui polling agressivo)
+      try {
+        const observer = new MutationObserver((mutations) => {
+          let hasRelevantChange = false;
+          for (const m of mutations) {
+            // Ignora mutações provocadas pelo próprio widget do OctaBlaster
+            for (const node of Array.from(m.addedNodes)) {
+              if (
+                node.nodeType === 1 &&
+                !(node as HTMLElement).classList?.contains('octablaster-floating-widget') &&
+                !(node as HTMLElement).id?.includes('octablaster')
+              ) {
+                hasRelevantChange = true;
+                break;
+              }
+            }
+            if (hasRelevantChange) break;
+
+            for (const node of Array.from(m.removedNodes)) {
+              if (
+                node.nodeType === 1 &&
+                !(node as HTMLElement).classList?.contains('octablaster-floating-widget')
+              ) {
+                hasRelevantChange = true;
+                break;
+              }
+            }
+            if (hasRelevantChange) break;
+          }
+
+          if (hasRelevantChange) {
+            scheduleWidgetUpdate(200);
+          }
+        });
+
+        const targetNode = document.body || document.documentElement;
+        if (targetNode) {
+          observer.observe(targetNode, {
+            childList: true,
+            subtree: true,
+          });
+        }
+      } catch (err) {
+        console.warn('[OctaBlaster] Falha ao inicializar MutationObserver:', err);
+      }
+
+      // Eventos de navegação e clique
+      window.addEventListener('popstate', () => scheduleWidgetUpdate(300));
+      window.addEventListener('hashchange', () => scheduleWidgetUpdate(300));
+      window.addEventListener('click', () => scheduleWidgetUpdate(350));
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) scheduleWidgetUpdate(100);
+      });
+
+      // Salvaguarda leve em segundo plano (5s ao invés de 800ms)
+      window.setInterval(() => {
+        if (!document.hidden) {
+          updateWidgetLifecycle();
+        }
+      }, 5000);
     }
 
     function startWhenReady() {
-      console.log('[OctaBlaster v0.3.7] Aguardando estabilização do carregamento da página...');
+      console.log('[OctaBlaster] Aguardando estabilização do carregamento da página...');
       const start = () => {
         setTimeout(initWidgetLifecycle, 1200);
       };
