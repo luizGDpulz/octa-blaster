@@ -81,7 +81,7 @@ let statusTimeout: number | undefined;
 const isMenuOpen = ref(false);
 const menuRef = ref<HTMLElement | null>(null);
 const showConfirmResetModal = ref(false);
-const appVersion = ref('0.4.0');
+const appVersion = ref('0.5.0');
 
 const isCheckingUpdate = ref(false);
 const updateInfo = ref<UpdateInfo | null>(null);
