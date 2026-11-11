@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue';
 import type { QuickReplyTemplate, InsertMessageResponse } from '@/types/template';
 import type { LicenseTicketInfo } from '@/utils/licenseDetector';
+import { resolveVariables } from '@/utils/templateResolver';
 
 const STORAGE_KEY = 'octablaster_quick_replies_v2';
 const HAS_INITIALIZED_KEY = 'octablaster_initialized_v2';
@@ -63,37 +64,7 @@ function setStatus(msg: string, type: 'success' | 'error' | 'info' = 'info') {
   }, 3500);
 }
 
-// Retorna "Bom dia", "Boa tarde" ou "Boa noite" com base no horário
-function getGreeting(): string {
-  const hour = new Date().getHours();
-  if (hour >= 5 && hour < 12) {
-    return 'Bom dia';
-  } else if (hour >= 12 && hour < 18) {
-    return 'Boa tarde';
-  } else {
-    return 'Boa noite';
-  }
-}
 
-// Substitui tags dinâmicas como {{Saudacao}}, {{Data}}, {{Hora}}
-function resolveVariables(text: string): string {
-  const greeting = getGreeting();
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('pt-BR');
-  const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-
-  return text
-    // Trata {{Saudacao}}! ou {Saudacao}! -> "Bom dia!" / "Boa tarde!" sem duplicar exclamação
-    .replace(/(?:\{\{|\{)\s*sauda[cç][aã]o\s*(?:\}\}|\})!+/gi, `${greeting}!`)
-    // Trata {{Saudacao}}, ou {Saudacao}, -> "Bom dia," / "Boa tarde,"
-    .replace(/(?:\{\{|\{)\s*sauda[cç][aã]o\s*(?:\}\}|\}),/gi, `${greeting},`)
-    // Trata {{Saudacao}} ou {Saudacao} avulso -> "Bom dia!" / "Boa tarde!"
-    .replace(/(?:\{\{|\{)\s*sauda[cç][aã]o\s*(?:\}\}|\})/gi, `${greeting}!`)
-    // Trata {{Data}} ou {Data}
-    .replace(/(?:\{\{|\{)\s*data\s*(?:\}\}|\})/gi, dateStr)
-    // Trata {{Hora}} ou {Hora}
-    .replace(/(?:\{\{|\{)\s*hora\s*(?:\}\}|\})/gi, timeStr);
-}
 
 async function loadTemplates() {
   try {

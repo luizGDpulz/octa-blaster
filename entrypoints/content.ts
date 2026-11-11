@@ -1,6 +1,7 @@
 import { insertTextIntoElement } from '@/utils/insertText';
 import { detectLicenseTicket, type LicenseTicketInfo } from '@/utils/licenseDetector';
 import { automateLicenseMentions, switchToInternalNote } from '@/utils/mentionHelper';
+import { resolveVariables } from '@/utils/templateResolver';
 import type { InsertMessageRequest, InsertMessageResponse, QuickReplyTemplate } from '@/types/template';
 
 export default defineContentScript({
@@ -723,14 +724,7 @@ export default defineContentScript({
               e.stopPropagation();
               const target = findEditorForWidget(widget, container);
               if (target) {
-                const hour = new Date().getHours();
-                const greeting =
-                  hour >= 5 && hour < 12 ? 'Bom dia' : hour >= 12 && hour < 18 ? 'Boa tarde' : 'Boa noite';
-                const processed = tpl.content
-                  .replace(/(?:\{\{|\{)\s*sauda[cç][aã]o\s*(?:\}\}|\})!+/gi, `${greeting}!`)
-                  .replace(/(?:\{\{|\{)\s*sauda[cç][aã]o\s*(?:\}\}|\}),/gi, `${greeting},`)
-                  .replace(/(?:\{\{|\{)\s*sauda[cç][aã]o\s*(?:\}\}|\})/gi, `${greeting}!`);
-
+                const processed = resolveVariables(tpl.content);
                 const reqId = `widget_${Date.now()}`;
                 insertTextIntoElement(target, processed, reqId);
                 dropdownMenu.style.display = 'none';
