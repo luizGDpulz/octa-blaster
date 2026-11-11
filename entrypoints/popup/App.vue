@@ -82,7 +82,7 @@ let statusTimeout: number | undefined;
 const isMenuOpen = ref(false);
 const menuRef = ref<HTMLElement | null>(null);
 const showConfirmResetModal = ref(false);
-const appVersion = ref('0.5.3');
+const appVersion = ref('0.5.4');
 
 const isCheckingUpdate = ref(false);
 const updateInfo = ref<UpdateInfo | null>(null);
@@ -475,6 +475,19 @@ async function openSidebarPanel() {
   }
 }
 
+function closePanel() {
+  try {
+    const b = browser as any;
+    if (b?.sidebarAction?.close && typeof b.sidebarAction.close === 'function') {
+      b.sidebarAction.close();
+      return;
+    }
+  } catch (err) {
+    console.warn('Erro ao fechar sidebar:', err);
+  }
+  window.close();
+}
+
 function toggleMenu() {
   isMenuOpen.value = !isMenuOpen.value;
 }
@@ -628,6 +641,17 @@ onUnmounted(() => {
             </div>
           </transition>
         </div>
+
+        <!-- Botão Fechar Painel (X) -->
+        <button
+          type="button"
+          class="btn-close-header"
+          title="Fechar"
+          aria-label="Fechar"
+          @click="closePanel"
+        >
+          <X :size="16" :stroke-width="2" />
+        </button>
       </div>
     </header>
 
@@ -890,7 +914,6 @@ onUnmounted(() => {
   background: var(--bg-primary);
   position: relative;
   box-sizing: border-box;
-  border: 1px solid var(--border);
   overflow: hidden;
 }
 
@@ -980,6 +1003,27 @@ onUnmounted(() => {
 
 .btn-options-trigger:hover,
 .btn-options-trigger.active {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.btn-close-header {
+  background: transparent;
+  color: #dee0e4;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  width: 28px;
+  height: 28px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.btn-close-header:hover {
   background: rgba(255, 255, 255, 0.16);
   color: #ffffff;
   border-color: rgba(255, 255, 255, 0.3);
