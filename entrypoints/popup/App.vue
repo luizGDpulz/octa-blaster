@@ -271,25 +271,56 @@ async function triggerLicenseMentions() {
 
 const canOpenSidebar = ref(false);
 
+async function checkSidebarSupport() {
+  try {
+    const b = browser as any;
+    const c = (globalThis as any).chrome;
+
+    if (b?.sidebarAction?.open && typeof b.sidebarAction.open === 'function') {
+      canOpenSidebar.value = true;
+      return;
+    }
+
+    if (c?.sidePanel?.open && typeof c.sidePanel.open === 'function') {
+      canOpenSidebar.value = true;
+      return;
+    }
+  } catch (err) {
+    console.warn('Erro ao checar suporte a painel lateral:', err);
+  }
+}
+
 async function openSidebarPanel() {
   try {
-    const b = (browser as any);
+    const b = browser as any;
+    const c = (globalThis as any).chrome;
+
+    // 1. Suporte ao Firefox (sidebar_action)
     if (b?.sidebarAction?.open && typeof b.sidebarAction.open === 'function') {
       await b.sidebarAction.open();
       window.close();
+      return;
+    }
+
+    // 2. Suporte ao Chromium MV3 (side_panel)
+    if (c?.sidePanel?.open && typeof c.sidePanel.open === 'function') {
+      const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+      if (tab?.windowId) {
+        await c.sidePanel.open({ windowId: tab.windowId });
+        window.close();
+        return;
+      }
     }
   } catch (err) {
     console.warn('Não foi possível abrir painel lateral programaticamente:', err);
+    setStatus('Não foi possível abrir o painel lateral.', 'error');
   }
 }
 
 onMounted(() => {
   loadTemplates();
   checkLicenseStatus();
-  const b = (browser as any);
-  if (b?.sidebarAction?.open && typeof b.sidebarAction.open === 'function') {
-    canOpenSidebar.value = true;
-  }
+  checkSidebarSupport();
 });
 </script>
 
@@ -311,7 +342,7 @@ onMounted(() => {
           v-if="canOpenSidebar"
           type="button"
           class="btn-sidebar-panel"
-          title="Abrir no Painel Lateral do Firefox"
+          title="Abrir no Painel Lateral (Sidebar)"
           @click="openSidebarPanel"
         >
           📌 Painel
