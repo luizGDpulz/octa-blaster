@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/badge/UI-Vue%203-42b883?style=flat-square&logo=vue.js&logoColor=white" alt="Vue 3" />
   <img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
   <img src="https://img.shields.io/badge/pnpm-fast-f69220?style=flat-square&logo=pnpm&logoColor=white" alt="pnpm" />
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/luizGDpulz/octa-blaster?color=3c3f43&style=flat-square" alt="Licença GPL-3.0" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/luizGDpulz/octa-blaster?color=3c3f43&style=flat-square" alt="Licença AGPL-3.0" /></a>
 </p>
 
 ---
