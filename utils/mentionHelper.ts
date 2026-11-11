@@ -1,4 +1,100 @@
 import { insertTextIntoElement } from './insertText';
+import type { MentionTarget } from '@/types/template';
+
+export const MENTION_TARGETS_STORAGE_KEY = 'octablaster_mention_targets';
+
+export const DEFAULT_MENTION_TARGETS: MentionTarget[] = [
+  {
+    id: 'jorge_tigre',
+    name: 'Jorge Tigre',
+    query: '@Jorge',
+    pattern: 'jorge\\s+tigre',
+    enabled: true,
+  },
+  {
+    id: 'roberto_renck',
+    name: 'Roberto Renck',
+    query: '@roberto',
+    pattern: 'roberto\\s+renck',
+    enabled: true,
+  },
+];
+
+function getBrowserStorageArea(): any {
+  if (typeof browser !== 'undefined' && browser?.storage?.local) {
+    return browser.storage.local;
+  }
+  const gChrome = (globalThis as any).chrome;
+  if (gChrome?.storage?.local) {
+    return gChrome.storage.local;
+  }
+  const gBrowser = (globalThis as any).browser;
+  if (gBrowser?.storage?.local) {
+    return gBrowser.storage.local;
+  }
+  return null;
+}
+
+export async function loadMentionTargets(): Promise<MentionTarget[]> {
+  const storage = getBrowserStorageArea();
+  if (storage) {
+    try {
+      const getRes = storage.get([MENTION_TARGETS_STORAGE_KEY]);
+      const res =
+        getRes && typeof getRes.then === 'function'
+          ? await getRes
+          : await new Promise<any>((resolve) => storage.get([MENTION_TARGETS_STORAGE_KEY], resolve));
+      if (
+        res &&
+        Array.isArray(res[MENTION_TARGETS_STORAGE_KEY]) &&
+        res[MENTION_TARGETS_STORAGE_KEY].length > 0
+      ) {
+        return res[MENTION_TARGETS_STORAGE_KEY];
+      }
+    } catch (err) {
+      console.warn('[OctaBlaster] Erro ao carregar mention targets do storage:', err);
+    }
+  }
+
+  if (typeof localStorage !== 'undefined') {
+    try {
+      const raw = localStorage.getItem(MENTION_TARGETS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {}
+  }
+
+  return JSON.parse(JSON.stringify(DEFAULT_MENTION_TARGETS));
+}
+
+export async function saveMentionTargets(targets: MentionTarget[]): Promise<void> {
+  const cleanTargets = JSON.parse(JSON.stringify(targets));
+  const storage = getBrowserStorageArea();
+  if (storage) {
+    try {
+      const setRes = storage.set({ [MENTION_TARGETS_STORAGE_KEY]: cleanTargets });
+      if (setRes && typeof setRes.then === 'function') {
+        await setRes;
+      } else {
+        await new Promise<void>((resolve) =>
+          storage.set({ [MENTION_TARGETS_STORAGE_KEY]: cleanTargets }, resolve),
+        );
+      }
+    } catch (err) {
+      console.warn('[OctaBlaster] Erro ao salvar mention targets no storage:', err);
+    }
+  }
+
+  if (typeof localStorage !== 'undefined') {
+    try {
+      localStorage.setItem(MENTION_TARGETS_STORAGE_KEY, JSON.stringify(cleanTargets));
+    } catch {}
+  }
+}
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -295,16 +391,55 @@ async function selectPersonFromPopover(
 }
 
 /**
- * Executa o fluxo automatizado de marcação de licenças:
+ * Insere a menção de um alvo específico no editor do Summernote e aguarda seleção no popover
+ */
+export async function insertMentionForTarget(
+  targetEditor: HTMLElement,
+  targetDoc: Document,
+  target: MentionTarget,
+  isFirst: boolean = false,
+): Promise<boolean> {
+  const prefix = isFirst ? '' : ' ';
+  const mentionQuery = target.query.startsWith('@') ? target.query : `@${target.query}`;
+  insertTextIntoElement(targetEditor, `${prefix}${mentionQuery}`);
+
+  // Dispara eventos de tecla e input para acionar o popover do Summernote
+  const triggerChar = mentionQuery.slice(-1) || 'a';
+  targetEditor.dispatchEvent(new KeyboardEvent('keydown', { key: triggerChar, bubbles: true }));
+  targetEditor.dispatchEvent(new Event('input', { bubbles: true }));
+  targetEditor.dispatchEvent(new KeyboardEvent('keyup', { key: triggerChar, bubbles: true }));
+
+  let pattern: RegExp;
+  try {
+    pattern = new RegExp(target.pattern, 'i');
+  } catch {
+    pattern = new RegExp(target.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+  }
+
+  const selected = await selectPersonFromPopover(pattern, targetDoc, 3500);
+
+  if (!selected) {
+    // Se não abriu o popover ou demorou, tenta com enter como fallback
+    targetEditor.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, which: 13, bubbles: true }),
+    );
+  }
+
+  await sleep(200);
+  return selected;
+}
+
+/**
+ * Executa o fluxo automatizado de marcação de responsáveis:
  * 1. Verifica se está em Anotação Interna; se não estiver, muda automaticamente para Anotação interna
  * 2. Aguarda o editor de anotação interna renderizar
- * 3. Digita @Jorge e seleciona Jorge Tigre no popover
- * 4. Digita @roberto e seleciona Roberto Renck no popover
+ * 3. Itera de forma modular sobre os responsáveis configurados (padrão: Jorge Tigre e Roberto Renck)
  */
 export async function automateLicenseMentions(
   editor?: HTMLElement | null,
   doc: Document = document,
   scope?: HTMLElement | null,
+  customTargets?: MentionTarget[],
 ): Promise<{ success: boolean; message: string }> {
   try {
     const targetDoc = editor?.ownerDocument || scope?.ownerDocument || doc;
@@ -333,49 +468,31 @@ export async function automateLicenseMentions(
     targetEditor.focus();
     await sleep(200);
 
-    // Passo 2: Digitar @Jorge e acionar menção
-    insertTextIntoElement(targetEditor, '@Jorge');
+    // Passo 2: Carrega os alvos de menção configurados
+    const targetsToMark = (customTargets || (await loadMentionTargets())).filter((t) => t.enabled);
 
-    // Dispara eventos de input e tecla para ativar o Summernote hint popover
-    targetEditor.dispatchEvent(new KeyboardEvent('keydown', { key: 'e', code: 'KeyE', bubbles: true }));
-    targetEditor.dispatchEvent(new Event('input', { bubbles: true }));
-    targetEditor.dispatchEvent(new KeyboardEvent('keyup', { key: 'e', code: 'KeyE', bubbles: true }));
-
-    // Aguarda o popover e seleciona Jorge Tigre
-    const selectedJorge = await selectPersonFromPopover(/jorge\s+tigre/i, targetDoc, 3500);
-
-    if (!selectedJorge) {
-      // Se não abriu o popover ou demorou, tenta com enter
-      targetEditor.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, which: 13, bubbles: true }),
-      );
+    if (targetsToMark.length === 0) {
+      return {
+        success: false,
+        message: 'Nenhum responsável configurado para marcação.',
+      };
     }
 
-    await sleep(200);
-
-    // Passo 3: Inserir espaço e digitar @roberto
-    insertTextIntoElement(targetEditor, ' @roberto');
-    targetEditor.dispatchEvent(new KeyboardEvent('keydown', { key: 'o', code: 'KeyO', bubbles: true }));
-    targetEditor.dispatchEvent(new Event('input', { bubbles: true }));
-    targetEditor.dispatchEvent(new KeyboardEvent('keyup', { key: 'o', code: 'KeyO', bubbles: true }));
-
-    // Aguarda o popover e seleciona Roberto Renck
-    const selectedRoberto = await selectPersonFromPopover(/roberto\s+renck/i, targetDoc, 3500);
-
-    if (!selectedRoberto) {
-      targetEditor.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, which: 13, bubbles: true }),
-      );
+    // Passo 3: Marca cada responsável sequencialmente
+    for (let i = 0; i < targetsToMark.length; i++) {
+      const target = targetsToMark[i];
+      if (target) {
+        await insertMentionForTarget(targetEditor, targetDoc, target, i === 0);
+      }
     }
 
-    await sleep(200);
-
-    // Adiciona espaço final
+    // Adiciona espaço final para continuação da escrita
     insertTextIntoElement(targetEditor, ' ');
 
+    const namesFormatted = targetsToMark.map((t) => `@${t.name}`).join(' e ');
     return {
       success: true,
-      message: 'Responsáveis de Licenças (@Jorge Tigre e @Roberto Renck) marcados com sucesso em Anotação Interna!',
+      message: `Responsáveis de Licenças (${namesFormatted}) marcados com sucesso em Anotação Interna!`,
     };
   } catch (error) {
     console.error('[OctaBlaster] Erro ao automatizar menções de licenças:', error);
