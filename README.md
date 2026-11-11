@@ -101,6 +101,8 @@ A saída pronta para carregar será gerada na pasta `.output/firefox-mv2`.
 
 ## 📦 Instalação Rápida via GitHub Releases (Sem Compilar Localmente)
 
+> 💡 **Guia Visual Completo para a Equipe:** Consulte o tutorial detalhado em [**docs/COMO-INSTALAR.md**](docs/COMO-INSTALAR.md).
+
 Você não precisa ter Node.js ou pnpm instalado para rodar o OctaBlaster no seu computador de uso diário! Basta baixar os pacotes pré-compilados:
 
 1. Acesse a aba de [Releases do Repositório](https://github.com/luizGDpulz/octa-blaster/releases).
