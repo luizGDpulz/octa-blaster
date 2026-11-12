@@ -463,7 +463,17 @@ export default defineContentScript({
         .octablaster-floating-widget[data-expanded="false"] .octa-dropdown {
           display: none !important;
         }
+        @keyframes octa-spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        .octa-spin {
+          animation: octa-spin 1s linear infinite !important;
+        }
         .octa-action-btn {
+          display: inline-flex !important;
+          align-items: center !important;
+          gap: 5px !important;
           background: #3c3f43 !important;
           color: #ffffff !important;
           border: 1px solid #5b5f63 !important;
@@ -475,6 +485,11 @@ export default defineContentScript({
           transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1) !important;
           white-space: nowrap !important;
           outline: none !important;
+          line-height: 1 !important;
+        }
+        .octa-action-btn svg {
+          flex-shrink: 0 !important;
+          display: block !important;
         }
         .octa-action-btn:hover {
           background: #5b5f63 !important;
@@ -491,15 +506,22 @@ export default defineContentScript({
           box-shadow: 0 2px 12px rgba(255, 198, 0, 0.5) !important;
         }
         .octa-min-btn {
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
           background: transparent !important;
           border: none !important;
           color: #dee0e4 !important;
-          font-size: 11px !important;
           cursor: pointer !important;
-          padding: 2px 6px !important;
+          padding: 3px !important;
           border-radius: 50% !important;
           transition: all 0.15s !important;
           outline: none !important;
+          line-height: 1 !important;
+        }
+        .octa-min-btn svg {
+          flex-shrink: 0 !important;
+          display: block !important;
         }
         .octa-min-btn:hover {
           color: #ffffff !important;
@@ -573,6 +595,15 @@ export default defineContentScript({
       (doc.head || doc.documentElement).appendChild(style);
     }
 
+    const ICONS = {
+      tag: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/></svg>`,
+      replies: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
+      loader: `<svg class="octa-spin" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>`,
+      check: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>`,
+      alert: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
+      x: `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`,
+    };
+
     /**
      * Cria uma instância isolada do botão flutuante para um contêiner de ticket específico
      */
@@ -592,15 +623,17 @@ export default defineContentScript({
           <div class="octa-bar-actions">
             <!-- Botão de licença acessível sob demanda -->
             <button type="button" class="octa-action-btn octa-license-btn octa-btn-license" title="Mudar para anotação interna e marcar responsáveis de licença">
-              🏷️ Marcar Licenças
+              ${ICONS.tag}
+              <span>Marcar Licenças</span>
             </button>
 
             <!-- Menu de Respostas Rápidas -->
             <button type="button" class="octa-action-btn octa-btn-replies" title="Abrir Respostas Rápidas">
-              📋 Respostas
+              ${ICONS.replies}
+              <span>Respostas</span>
             </button>
 
-            <button type="button" class="octa-min-btn octa-btn-minimize" title="Recolher">✕</button>
+            <button type="button" class="octa-min-btn octa-btn-minimize" title="Recolher">${ICONS.x}</button>
           </div>
 
           <!-- Dropdown com os modelos salvos -->
@@ -682,8 +715,16 @@ export default defineContentScript({
           }
         }
 
-        const originalText = btnLicense.textContent || '🏷️ Marcar Licenças';
-        btnLicense.textContent = '⏳ Marcando...';
+        const setLicenseBtnState = (icon: string, text: string) => {
+          btnLicense.innerHTML = `${icon}<span>${text}</span>`;
+        };
+
+        const resetLicenseBtn = () => {
+          setLicenseBtnState(ICONS.tag, 'Marcar Licenças');
+          btnLicense.style.opacity = '1';
+        };
+
+        setLicenseBtnState(ICONS.loader, 'Marcando...');
         btnLicense.style.opacity = '0.7';
 
         try {
@@ -691,18 +732,15 @@ export default defineContentScript({
           const targetDoc = localEditor?.ownerDocument || doc;
           const res = await automateLicenseMentions(localEditor, targetDoc, container);
           if (res.success) {
-            btnLicense.textContent = '✅ Marcados!';
+            setLicenseBtnState(ICONS.check, 'Marcados!');
           } else {
-            btnLicense.textContent = '❌ Falha ao marcar';
+            setLicenseBtnState(ICONS.alert, 'Falha ao marcar');
           }
         } catch (err) {
           console.error('[OctaBlaster] Erro ao marcar responsáveis:', err);
-          btnLicense.textContent = '❌ Erro';
+          setLicenseBtnState(ICONS.alert, 'Erro');
         } finally {
-          setTimeout(() => {
-            btnLicense.textContent = originalText;
-            btnLicense.style.opacity = '1';
-          }, 2500);
+          setTimeout(resetLicenseBtn, 2500);
         }
       });
 
@@ -763,10 +801,9 @@ export default defineContentScript({
                 insertTextIntoElement(target, processed, reqId);
                 dropdownMenu.style.display = 'none';
               } else {
-                const prevText = btnReplies.textContent;
-                btnReplies.textContent = '⚠️ Selecione o editor';
+                btnReplies.innerHTML = `${ICONS.alert}<span>Selecione o editor</span>`;
                 setTimeout(() => {
-                  btnReplies.textContent = prevText || '📋 Respostas';
+                  btnReplies.innerHTML = `${ICONS.replies}<span>Respostas</span>`;
                 }, 2500);
                 dropdownMenu.style.display = 'none';
               }
