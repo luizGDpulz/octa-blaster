@@ -410,14 +410,14 @@ export default defineContentScript({
           box-shadow: none !important;
           padding: 0 !important;
         }
-        /* Estado EXPANDIDO: barra Notion #23222b elegante sem borda preta pesada */
+        /* Estado EXPANDIDO: barra #1c1b22 elegante sem borda branca */
         .octablaster-floating-widget[data-expanded="true"] .octa-bar-container {
-          background: #23222b !important;
+          background: #1c1b22 !important;
           color: #ffffff !important;
           border-radius: 20px !important;
           padding: 3px 8px !important;
           box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28) !important;
-          border: 1px solid rgba(255, 255, 255, 0.14) !important;
+          border: none !important;
         }
         .octa-pill-btn {
           display: inline-flex !important;
