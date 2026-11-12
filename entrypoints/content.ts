@@ -535,7 +535,7 @@ export default defineContentScript({
           background: #ffffff !important;
           color: #1c1b1c !important;
           border-radius: 8px !important;
-          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35) !important;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.05) !important;
           border: 1px solid #dee0e4 !important;
           overflow: hidden !important;
           z-index: 2147483647 !important;
@@ -546,9 +546,9 @@ export default defineContentScript({
           font-weight: 700 !important;
           text-transform: uppercase !important;
           letter-spacing: 0.5px !important;
-          background: #1c1b1c !important;
-          border-bottom: 1px solid #3c3f43 !important;
-          color: #ffc600 !important;
+          background: #f7f8f9 !important;
+          border-bottom: 1px solid #dee0e4 !important;
+          color: #5b5f63 !important;
         }
         .octa-dropdown-list {
           max-height: 250px !important;
@@ -556,10 +556,23 @@ export default defineContentScript({
           display: flex !important;
           flex-direction: column !important;
         }
+        .octa-dropdown-list::-webkit-scrollbar {
+          width: 5px !important;
+        }
+        .octa-dropdown-list::-webkit-scrollbar-track {
+          background: #f7f8f9 !important;
+        }
+        .octa-dropdown-list::-webkit-scrollbar-thumb {
+          background: #dee0e4 !important;
+          border-radius: 4px !important;
+        }
+        .octa-dropdown-list::-webkit-scrollbar-thumb:hover {
+          background: #cbd5e1 !important;
+        }
         .octa-dropdown-item {
           padding: 8px 12px !important;
           cursor: pointer !important;
-          border-bottom: 1px solid #f7f8f9 !important;
+          border-bottom: 1px solid #f0f1f3 !important;
           text-align: left !important;
           background: transparent !important;
           border-left: none !important;
@@ -567,15 +580,35 @@ export default defineContentScript({
           border-top: none !important;
           width: 100% !important;
           font-size: 12px !important;
-          transition: background 0.15s !important;
+          transition: background 0.12s ease !important;
+        }
+        .octa-dropdown-item:last-child {
+          border-bottom: none !important;
         }
         .octa-dropdown-item:hover {
-          background: rgba(255, 198, 0, 0.12) !important;
+          background: #f1f2f4 !important;
+        }
+        .octa-item-header {
+          display: flex !important;
+          align-items: center !important;
+          justify-content: space-between !important;
+          gap: 6px !important;
         }
         .octa-item-title {
           font-weight: 600 !important;
           color: #1c1b1c !important;
           display: block !important;
+          font-size: 12px !important;
+        }
+        .octa-item-category {
+          font-size: 10px !important;
+          background: #f1f2f4 !important;
+          color: #5b5f63 !important;
+          padding: 1px 6px !important;
+          border-radius: 4px !important;
+          font-weight: 500 !important;
+          white-space: nowrap !important;
+          flex-shrink: 0 !important;
         }
         .octa-item-preview {
           font-size: 11px !important;
@@ -590,6 +623,7 @@ export default defineContentScript({
           text-align: center !important;
           font-size: 12px !important;
           color: #5b5f63 !important;
+          background: #ffffff !important;
         }
       `;
       (doc.head || doc.documentElement).appendChild(style);
@@ -775,15 +809,26 @@ export default defineContentScript({
             itemBtn.type = 'button';
             itemBtn.className = 'octa-dropdown-item';
 
+            const topRow = doc.createElement('div');
+            topRow.className = 'octa-item-header';
+
             const titleEl = doc.createElement('span');
             titleEl.className = 'octa-item-title';
             titleEl.textContent = tpl.title;
+            topRow.appendChild(titleEl);
+
+            if (tpl.category) {
+              const catBadge = doc.createElement('span');
+              catBadge.className = 'octa-item-category';
+              catBadge.textContent = tpl.category;
+              topRow.appendChild(catBadge);
+            }
 
             const previewEl = doc.createElement('div');
             previewEl.className = 'octa-item-preview';
             previewEl.textContent = tpl.content.replace(/\n/g, ' ');
 
-            itemBtn.appendChild(titleEl);
+            itemBtn.appendChild(topRow);
             itemBtn.appendChild(previewEl);
 
             itemBtn.addEventListener('mousedown', (e) => {
