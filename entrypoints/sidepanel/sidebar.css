@@ -26,13 +26,9 @@ body {
 }
 
 .header {
-  background: #23222b !important;
+  background: #1c1b22 !important;
   border-top: none !important;
-  justify-content: flex-end !important;
-  padding: 4px 12px 8px 12px !important;
-  min-height: 38px !important;
-}
-
-.brand {
-  display: none !important;
+  justify-content: space-between !important;
+  padding: 6px 12px !important;
+  min-height: 40px !important;
 }
