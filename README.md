@@ -189,11 +189,16 @@ Se você já carregou a extensão temporária anteriormente e gerou um novo buil
 
 ---
 
-## 💬 Sugestões, Melhorias e Reporte de Erros
+## 💬 Sugestões, Ideias e Reporte de Erros (Canal Direto)
 
-O desenvolvimento do OctaBlaster é contínuo e aberto! Seja você membro da equipe ou usuário da comunidade, sua colaboração é fundamental:
+O OctaBlaster é mantido e evoluído de forma contínua para facilitar a rotina de atendimento. Se você usa a extensão no suporte ou na comunidade, o seu feedback é fundamental:
 
-- **Quer sugerir uma melhoria, nova mensagem padrão ou discutir ideias?**
-  Participe das nossas conversas no [**GitHub Discussions**](https://github.com/luizGDpulz/octa-blaster/discussions)!
-- **Encontrou um erro, bug ou falha de comportamento no Octadesk?**
-  Abra um reporte detalhado na aba de [**Issues**](https://github.com/luizGDpulz/octa-blaster/issues).
+- 💬 **Canal Amigável no [GitHub Discussions](https://github.com/luizGDpulz/octa-blaster/discussions):**
+  É o canal oficial e direto para o usuário final — sem burocracia técnica e sem formulários complicados. Você pode acessar para:
+  - **Sugerir melhorias:** Ideias de novos botões, atalhos ou automações úteis no Octadesk;
+  - **Novos modelos de resposta:** Enviar textos que você digita com frequência para que venham embutidos de fábrica;
+  - **Avisar sobre erros:** Relatar se um botão sumiu, se a marcação falhou ou se algo se comportou de forma estranha;
+  - **Tirar dúvidas:** Ajuda para instalar, ativar no painel lateral ou atualizar a extensão.
+
+- 🛠️ **Rastreamento Técnico (Issues):**
+  Para quem preferir abrir um ticket técnico detalhado de desenvolvimento ou acompanhar correções de código, a aba de [**Issues**](https://github.com/luizGDpulz/octa-blaster/issues) continua ativa e integrada ao fluxo de desenvolvimento.
