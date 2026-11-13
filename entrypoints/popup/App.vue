@@ -56,7 +56,7 @@ let statusTimeout: number | undefined;
 const isMenuOpen = ref(false);
 const menuRef = ref<HTMLElement | null>(null);
 const showConfirmResetModal = ref(false);
-const appVersion = ref('0.5.8');
+const appVersion = ref('0.5.9');
 
 const isSidebar = computed(() => {
   if (typeof window === 'undefined') return false;
