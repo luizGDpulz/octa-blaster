@@ -202,6 +202,39 @@ export function isInternalNoteTabActive(scope: Document | HTMLElement = document
  *   <a ng-click="vm.commentTypeSelected = 3; vm.showReply = true"><i class="icon-edit"></i> Anotação interna</a>
  * </li>
  */
+function isElementVisible(el: HTMLElement | null | undefined, minWidth = 1, minHeight = 1): boolean {
+  if (!el || !el.isConnected) return false;
+  const win = el.ownerDocument.defaultView || window;
+  const style = win.getComputedStyle(el);
+  if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+    return false;
+  }
+  const rect = el.getBoundingClientRect();
+  return rect.width >= minWidth && rect.height >= minHeight;
+}
+
+function findVisibleEditorInContainer(container: ParentNode | null | undefined): HTMLElement | null {
+  if (!container) return null;
+
+  const internalSelectors =
+    'div[ng-if*="typeInteractionSelected == 3"] .note-editable, div[ng-include*="comments/internal.html"] .note-editable';
+  const internalEditables = container.querySelectorAll<HTMLElement>(internalSelectors);
+  for (const el of Array.from(internalEditables)) {
+    if (isElementVisible(el, 30, 20)) {
+      return el;
+    }
+  }
+
+  const editables = container.querySelectorAll<HTMLElement>('.note-editable');
+  for (const el of Array.from(editables)) {
+    if (isElementVisible(el, 30, 20)) {
+      return el;
+    }
+  }
+
+  return null;
+}
+
 export async function switchToInternalNote(scope: Document | HTMLElement = document): Promise<boolean> {
   if (isInternalNoteTabActive(scope)) {
     return true;
@@ -219,7 +252,7 @@ export async function switchToInternalNote(scope: Document | HTMLElement = docum
       specificLink.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
       specificLink.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
       specificLink.click();
-      await sleep(150);
+      await sleep(125);
       return true;
     }
 
@@ -235,7 +268,7 @@ export async function switchToInternalNote(scope: Document | HTMLElement = docum
         item.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
         item.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
         item.click();
-        await sleep(300);
+        await sleep(125);
         return true;
       }
     }
@@ -263,7 +296,7 @@ export async function switchToInternalNote(scope: Document | HTMLElement = docum
       specificLink.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
       specificLink.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
       specificLink.click();
-      await sleep(150);
+      await sleep(125);
       return true;
     }
 
@@ -280,7 +313,7 @@ export async function switchToInternalNote(scope: Document | HTMLElement = docum
         item.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
         item.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
         item.click();
-        await sleep(150);
+        await sleep(125);
         return true;
       }
     }
@@ -294,59 +327,44 @@ export async function switchToInternalNote(scope: Document | HTMLElement = docum
  */
 export async function waitForInternalNoteEditor(
   scope: Document | HTMLElement = document,
-  maxWaitMs: number = 4000,
+  maxWaitMs: number = 3200,
 ): Promise<HTMLElement | null> {
   const startTime = Date.now();
 
   while (Date.now() - startTime < maxWaitMs) {
     if (isDOMElement(scope)) {
-      const targetContainer =
-        scope.closest<HTMLElement>('.space-x-md, .ticket-view, .box, [ticket]') || scope.parentElement || scope;
-      const editables = targetContainer.querySelectorAll<HTMLElement>('.note-editable');
-      for (const el of Array.from(editables)) {
-        const rect = el.getBoundingClientRect();
-        const win = el.ownerDocument.defaultView || window;
-        const style = win.getComputedStyle(el);
-        if (
-          rect.width > 30 &&
-          rect.height > 20 &&
-          style.display !== 'none' &&
-          style.visibility !== 'hidden'
-        ) {
-          return el;
-        }
+      // Sobe pelos ancestrais do ticket até encontrar um contêiner que contenha o editor visível
+      let cursor: HTMLElement | null = scope;
+      for (let depth = 0; depth < 7 && cursor && cursor.tagName !== 'BODY'; depth++) {
+        const found = findVisibleEditorInContainer(cursor);
+        if (found) return found;
+        cursor = cursor.parentElement;
+      }
+
+      if (scope.ownerDocument) {
+        const docEditor = findVisibleEditorInContainer(scope.ownerDocument);
+        if (docEditor) return docEditor;
       }
     } else {
       const allDocs = getAllDocuments(scope);
       for (const d of allDocs) {
-        const isInternal = isInternalNoteTabActive(d);
-        const editables = d.querySelectorAll<HTMLElement>('.note-editable');
-
-        for (const el of Array.from(editables)) {
-          const rect = el.getBoundingClientRect();
-          const win = el.ownerDocument.defaultView || window;
-          const style = win.getComputedStyle(el);
-          if (
-            rect.width > 30 &&
-            rect.height > 20 &&
-            style.display !== 'none' &&
-            style.visibility !== 'hidden'
-          ) {
-            if (isInternal) {
-              return el;
-            }
-          }
+        if (isInternalNoteTabActive(d)) {
+          const found = findVisibleEditorInContainer(d);
+          if (found) return found;
         }
       }
     }
 
-    await sleep(100);
+    await sleep(80);
   }
 
   if (isDOMElement(scope)) {
-    return scope.querySelector<HTMLElement>('.note-editable') || scope.ownerDocument.querySelector<HTMLElement>('.note-editable');
+    return (
+      findVisibleEditorInContainer(scope.ownerDocument) ||
+      scope.ownerDocument.querySelector<HTMLElement>('.note-editable')
+    );
   }
-  return scope.querySelector<HTMLElement>('.note-editable');
+  return findVisibleEditorInContainer(scope) || scope.querySelector<HTMLElement>('.note-editable');
 }
 
 /**
@@ -356,7 +374,7 @@ export async function waitForInternalNoteEditor(
 async function selectPersonFromPopover(
   namePattern: RegExp,
   doc: Document = document,
-  maxWaitMs: number = 3500,
+  maxWaitMs: number = 2800,
 ): Promise<boolean> {
   const startTime = Date.now();
 
@@ -364,16 +382,17 @@ async function selectPersonFromPopover(
     const allDocs = getAllDocuments(doc);
 
     for (const d of allDocs) {
-      // Busca pelo popover e itens de sugestão (.popover-content.note-children-container)
+      // Busca apenas em popovers/menus de menção VISÍVEIS (evita clicar em dropdowns fechados do ticket)
       const items = d.querySelectorAll<HTMLElement>(
-        '.popover-content .note-hint-item, .note-children-container .person-item, .note-hint-item, .person-item, .popover-content li, .dropdown-menu li',
+        '.note-hint-popover .note-hint-item, .popover-content .note-hint-item, .note-children-container .person-item, .note-hint-item, .person-item, .popover-content li, .dropdown-menu.open li, .open > .dropdown-menu li',
       );
 
       for (const item of Array.from(items)) {
-        const text = (item.textContent || '').trim();
+        const targetItem = (item.closest('.note-hint-item') as HTMLElement) || item;
+        if (!isElementVisible(targetItem, 10, 10)) continue;
+
+        const text = (targetItem.textContent || '').trim();
         if (namePattern.test(text)) {
-          // O elemento clicável pode ser o .note-hint-item ou o .person-item
-          const targetItem = (item.closest('.note-hint-item') as HTMLElement) || item;
           targetItem.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
           targetItem.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
           targetItem.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
@@ -384,7 +403,7 @@ async function selectPersonFromPopover(
       }
     }
 
-    await sleep(100);
+    await sleep(75);
   }
 
   return false;
@@ -399,15 +418,24 @@ export async function insertMentionForTarget(
   target: MentionTarget,
   isFirst: boolean = false,
 ): Promise<boolean> {
+  if (targetDoc.activeElement !== targetEditor) {
+    targetEditor.focus();
+  }
+
   const prefix = isFirst ? '' : ' ';
   const mentionQuery = target.query.startsWith('@') ? target.query : `@${target.query}`;
-  insertTextIntoElement(targetEditor, `${prefix}${mentionQuery}`);
+  insertTextIntoElement(targetEditor, `${prefix}${mentionQuery}`, undefined, true);
 
   // Dispara eventos de tecla e input para acionar o popover do Summernote
   const triggerChar = mentionQuery.slice(-1) || 'a';
-  targetEditor.dispatchEvent(new KeyboardEvent('keydown', { key: triggerChar, bubbles: true }));
+  const charCode = triggerChar.charCodeAt(0);
+  targetEditor.dispatchEvent(
+    new KeyboardEvent('keydown', { key: triggerChar, keyCode: charCode, which: charCode, bubbles: true }),
+  );
   targetEditor.dispatchEvent(new Event('input', { bubbles: true }));
-  targetEditor.dispatchEvent(new KeyboardEvent('keyup', { key: triggerChar, bubbles: true }));
+  targetEditor.dispatchEvent(
+    new KeyboardEvent('keyup', { key: triggerChar, keyCode: charCode, which: charCode, bubbles: true }),
+  );
 
   let pattern: RegExp;
   try {
@@ -416,7 +444,7 @@ export async function insertMentionForTarget(
     pattern = new RegExp(target.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
   }
 
-  const selected = await selectPersonFromPopover(pattern, targetDoc, 3500);
+  const selected = await selectPersonFromPopover(pattern, targetDoc, 2800);
 
   if (!selected) {
     // Se não abriu o popover ou demorou, tenta com enter como fallback
@@ -425,7 +453,7 @@ export async function insertMentionForTarget(
     );
   }
 
-  await sleep(200);
+  await sleep(160);
   return selected;
 }
 
@@ -452,9 +480,9 @@ export async function automateLicenseMentions(
       console.log('[OctaBlaster] Resposta pública detectada. Alternando para Anotação interna...');
       await switchToInternalNote(targetScope);
       // Aguarda o Angular renderizar o novo editor Summernote da Anotação interna
-      targetEditor = await waitForInternalNoteEditor(targetScope, 4000);
-    } else if (!targetEditor) {
-      targetEditor = await waitForInternalNoteEditor(targetScope, 2000);
+      targetEditor = await waitForInternalNoteEditor(targetScope, 3200);
+    } else if (!targetEditor || !isElementVisible(targetEditor, 30, 20)) {
+      targetEditor = await waitForInternalNoteEditor(targetScope, 1600);
     }
 
     if (!targetEditor) {
@@ -464,9 +492,11 @@ export async function automateLicenseMentions(
       };
     }
 
+    const editorDoc = targetEditor.ownerDocument || targetDoc;
+
     // Foca no editor de Anotação Interna
     targetEditor.focus();
-    await sleep(200);
+    await sleep(160);
 
     // Passo 2: Carrega os alvos de menção configurados
     const targetsToMark = (customTargets || (await loadMentionTargets())).filter((t) => t.enabled);
@@ -479,20 +509,30 @@ export async function automateLicenseMentions(
     }
 
     // Passo 3: Marca cada responsável sequencialmente
+    const markedNames: string[] = [];
     for (let i = 0; i < targetsToMark.length; i++) {
       const target = targetsToMark[i];
       if (target) {
-        await insertMentionForTarget(targetEditor, targetDoc, target, i === 0);
+        const selected = await insertMentionForTarget(targetEditor, editorDoc, target, i === 0);
+        if (selected) {
+          markedNames.push(`@${target.name}`);
+        }
       }
     }
 
-    // Adiciona espaço final para continuação da escrita
-    insertTextIntoElement(targetEditor, ' ');
+    if (markedNames.length === 0) {
+      return {
+        success: false,
+        message: 'Editor aberto, mas o popover de menção do Octadesk não respondeu para selecionar os usuários.',
+      };
+    }
 
-    const namesFormatted = targetsToMark.map((t) => `@${t.name}`).join(' e ');
+    // Adiciona espaço final para continuação da escrita
+    insertTextIntoElement(targetEditor, ' ', undefined, true);
+
     return {
       success: true,
-      message: `Responsáveis de Licenças (${namesFormatted}) marcados com sucesso em Anotação Interna!`,
+      message: `Responsáveis de Licenças (${markedNames.join(' e ')}) marcados com sucesso em Anotação Interna!`,
     };
   } catch (error) {
     console.error('[OctaBlaster] Erro ao automatizar menções de licenças:', error);
