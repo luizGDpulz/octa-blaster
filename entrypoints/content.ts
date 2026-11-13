@@ -410,14 +410,14 @@ export default defineContentScript({
           box-shadow: none !important;
           padding: 0 !important;
         }
-        /* Estado EXPANDIDO: barra #1c1b22 elegante sem borda branca */
+        /* Estado EXPANDIDO: fundo claro #f7f8f9 com borda escura #3c3f43 */
         .octablaster-floating-widget[data-expanded="true"] .octa-bar-container {
-          background: #1c1b22 !important;
-          color: #ffffff !important;
+          background: #f7f8f9 !important;
+          color: #3c3f43 !important;
           border-radius: 20px !important;
           padding: 3px 8px !important;
-          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28) !important;
-          border: none !important;
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12) !important;
+          border: 1px solid #3c3f43 !important;
         }
         .octa-pill-btn {
           display: inline-flex !important;
@@ -474,9 +474,9 @@ export default defineContentScript({
           display: inline-flex !important;
           align-items: center !important;
           gap: 5px !important;
-          background: #3c3f43 !important;
-          color: #ffffff !important;
-          border: 1px solid #5b5f63 !important;
+          background: #ffffff !important;
+          color: #3c3f43 !important;
+          border: 1px solid #3c3f43 !important;
           border-radius: 14px !important;
           padding: 4px 10px !important;
           font-size: 12px !important;
@@ -492,18 +492,18 @@ export default defineContentScript({
           display: block !important;
         }
         .octa-action-btn:hover {
-          background: #5b5f63 !important;
+          background: #eceef0 !important;
         }
         .octa-license-btn {
           background: #ffc600 !important;
-          border: 1px solid #e5b100 !important;
+          border: 1px solid #3c3f43 !important;
           color: #1c1b1c !important;
           font-weight: 700 !important;
           box-shadow: 0 2px 8px rgba(255, 198, 0, 0.25) !important;
         }
         .octa-license-btn:hover {
           background: #f0ba00 !important;
-          box-shadow: 0 2px 12px rgba(255, 198, 0, 0.5) !important;
+          box-shadow: 0 2px 12px rgba(255, 198, 0, 0.45) !important;
         }
         .octa-min-btn {
           display: inline-flex !important;
@@ -511,7 +511,7 @@ export default defineContentScript({
           justify-content: center !important;
           background: transparent !important;
           border: none !important;
-          color: #dee0e4 !important;
+          color: #3c3f43 !important;
           cursor: pointer !important;
           padding: 3px !important;
           border-radius: 50% !important;
@@ -524,8 +524,8 @@ export default defineContentScript({
           display: block !important;
         }
         .octa-min-btn:hover {
-          color: #ffffff !important;
-          background: #3c3f43 !important;
+          color: #1c1b1c !important;
+          background: #eceef0 !important;
         }
         .octa-dropdown {
           position: absolute !important;
@@ -536,7 +536,7 @@ export default defineContentScript({
           color: #1c1b1c !important;
           border-radius: 8px !important;
           box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.05) !important;
-          border: 1px solid #dee0e4 !important;
+          border: 1px solid #3c3f43 !important;
           overflow: hidden !important;
           z-index: 2147483647 !important;
         }
@@ -551,25 +551,30 @@ export default defineContentScript({
           color: #5b5f63 !important;
         }
         .octa-dropdown-list {
-          max-height: 250px !important;
+          max-height: min(260px, 50vh) !important;
           overflow-y: auto !important;
+          overflow-x: hidden !important;
+          overscroll-behavior: contain !important;
           display: flex !important;
           flex-direction: column !important;
+          scrollbar-width: thin !important;
+          scrollbar-color: #cbd5e1 #f7f8f9 !important;
         }
         .octa-dropdown-list::-webkit-scrollbar {
-          width: 5px !important;
+          width: 6px !important;
         }
         .octa-dropdown-list::-webkit-scrollbar-track {
           background: #f7f8f9 !important;
         }
         .octa-dropdown-list::-webkit-scrollbar-thumb {
-          background: #dee0e4 !important;
+          background: #cbd5e1 !important;
           border-radius: 4px !important;
         }
         .octa-dropdown-list::-webkit-scrollbar-thumb:hover {
-          background: #cbd5e1 !important;
+          background: #94a3b8 !important;
         }
         .octa-dropdown-item {
+          flex-shrink: 0 !important;
           padding: 8px 12px !important;
           cursor: pointer !important;
           border-bottom: 1px solid #f0f1f3 !important;
@@ -650,6 +655,7 @@ export default defineContentScript({
         <div class="octa-bar-container">
           <button type="button" class="octa-pill-btn octa-btn-toggle" title="OctaBlaster (Clique para expandir)">
             <svg class="octa-logo-svg" viewBox="0 0 498.69 498.69" width="24" height="24" fill="#ffc600" aria-hidden="true">
+              <rect x="55" y="55" width="388" height="388" rx="70" fill="#1c1b1c" />
               <path d="M6.14,102C11.14,49.59,49.47,10.93,101.89,6,137.18,2.69,185.36,0,249.34,0s114.33,2.76,149.83,6.18c51.07,4.92,88.41,42.26,93.34,93.34,3.42,35.5,6.18,84.39,6.18,149.83s-2.76,114.32-6.18,149.82c-4.93,51.08-42.27,88.42-93.34,93.34-35.5,3.42-84.4,6.18-149.83,6.18s-112.16-2.63-147.45-6c-52.42-4.93-90.73-43.59-95.75-96C2.74,361.07,0,312.69,0,249.3S2.72,137.57,6.14,102m392.8,209.12c-3.01-11.83-15.03-18.98-26.86-16-6.28,1.42-12.77,1.74-19.16,.93-15.58-1.65-36-16.44-39.76-37.9-1.09-12.34,4.58-21.56,11.24-31.43,9-13.28,17.33-29.82,17.33-51.11,0-47.74-43.63-90.33-92.34-90.33s-93.78,39.72-93.78,90.28c0,21.29,9.82,37.83,18.82,51.11,6.66,9.88,12.33,19.08,11.24,31.43-1.08,17.13-24.21,36.25-39.76,37.9-6.39,.81-12.88,.49-19.16-.93-11.84-3.01-23.88,4.15-26.89,15.99h0c-1.43,5.69-.54,11.71,2.47,16.73,3.02,5.03,7.92,8.66,13.61,10.08,7.41,1.82,15.02,2.72,22.65,2.68,4.01,0,8.02-.22,12-.65,9.92-.9,19.58-3.65,28.48-8.11,5.4-1.37,10.41-3.95,14.65-7.55,2.42-1.88,4-3.09,5.28-2.21,3,2,2.76,4.6,1.58,7.5-.26,.58-.53,1.16-.81,1.73-.92,1.67-1.92,3.29-3,4.85-.63,.94-1.23,1.84-1.73,2.65-2.89,4.73-.49,1.07,4-5.91-1.8,3.46-3.85,6.79-6.14,9.95-9,12.35-16.76,21.68-23.8,28.54-6.41,6.23-8.42,15.71-5.08,24,4.62,11.35,17.56,16.81,28.92,12.19,2.64-1.07,5.04-2.64,7.08-4.62,8.85-8.63,18.26-19.8,28.7-34.2,8.75-12.12,15.27-25.7,19.26-40.11,.64-.84,1.51-1.47,2.51-1.8,3.95,15.06,10.65,29.27,19.75,41.91,10.48,14.4,19.86,25.57,28.71,34.2,8.71,8.55,22.71,8.41,31.26-.3s8.41-22.71-.31-31.25c-7-6.86-14.82-16.19-23.8-28.54-4.56-6.33-8.18-13.29-10.74-20.66,.44-.77,1.06-1.43,1.81-1.91,1.33-.86,2.87,.35,5.27,2.22,3.96,3.36,8.58,5.84,13.57,7.29,8.7,5.2,19.1,8.8,32.23,10.19,3.99,.43,7.99,.65,12,.65,7.63,.04,15.24-.86,22.65-2.68,8.69-2.16,15.22-9.36,16.52-18.22,.42-2.88,.26-5.81-.47-8.62v.05Zm-141.94-122c0,14.66,7.93,18.34,17.72,18.34s17.69-3.69,17.69-18.34-8-21.44-17.82-21.44-17.59,6.74-17.59,21.4v.04Zm-52.67,0c0,14.53,7.85,18.11,17.54,18.11s17.53-3.59,17.53-18.11-7.92-21.2-17.66-21.2-17.41,6.64-17.41,21.16v.04Z" />
             </svg>
           </button>
