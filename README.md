@@ -11,6 +11,7 @@
 <p align="center">
   <a href="https://github.com/luizGDpulz/octa-blaster/releases"><img src="https://img.shields.io/github/v/release/luizGDpulz/octa-blaster?color=ffc600&label=release&logo=github&style=flat-square" alt="GitHub Release" /></a>
   <a href="https://github.com/luizGDpulz/octa-blaster/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/luizGDpulz/octa-blaster/ci.yml?branch=main&label=ci&logo=githubactions&logoColor=white&style=flat-square" alt="CI Status" /></a>
+  <a href="https://github.com/luizGDpulz/octa-blaster/discussions"><img src="https://img.shields.io/badge/community-discussions-ffc600?style=flat-square&logo=github&logoColor=white" alt="GitHub Discussions" /></a>
   <img src="https://img.shields.io/badge/browsers-Firefox%20%7C%20Chromium-3c3f43?style=flat-square&logo=firefox-browser&logoColor=white" alt="Suporte a Navegadores" />
   <img src="https://img.shields.io/badge/framework-WXT-blueviolet?style=flat-square" alt="WXT" />
   <img src="https://img.shields.io/badge/UI-Vue%203-42b883?style=flat-square&logo=vue.js&logoColor=white" alt="Vue 3" />
@@ -25,7 +26,7 @@
 
 Extensão moderna para navegadores web construída com **WXT (Next-gen Web Extension Framework)**, **TypeScript** e **Vue 3**, com suporte nativo e ultra-otimizado para o **Firefox** (incluindo assinatura digital `.xpi` permanente e Painel Lateral / Sidebar) e plataformas Chromium (Chrome, Edge, Brave, Opera).
 
-Projetada especificamente para equipes de atendimento e suporte que utilizam o **Octadesk**, integrando respostas prontas, injeção inteligente de texto, variáveis dinâmicas de saudação e **automação de tickets de licenças** com isolamento estrito entre chamados concorrentes.
+Projetada especificamente para equipes de atendimento e suporte que utilizam o **Octadesk**, integrando respostas prontas com variáveis dinâmicas de saudação, injeção de texto com idempotência, menu de contexto integrado e **automação inteligente de tickets de licenças** com isolamento estrito entre chamados concorrentes.
 
 ---
 
@@ -33,10 +34,11 @@ Projetada especificamente para equipes de atendimento e suporte que utilizam o *
 
 - **Framework**: [WXT](https://wxt.dev/) (Vite-powered Web Extension Framework)
 - **UI**: [Vue 3](https://vuejs.org/) (Composition API, `<script setup>`)
+- **Ícones**: [Lucide Icons](https://lucide.dev/) (SVG vetorial integrado)
 - **Linguagem**: [TypeScript](https://www.typescriptlang.org/)
-- **Design System**: Paleta inspirada no **Secullum VMS** (Cinza Corporativo `#1c1b1c` / `#3c3f43` e Amarelo Destaque `#ffc600`)
+- **Design System**: Paleta corporativa inspirada no **Secullum VMS** (Cinza Corporativo `#1c1b1c` / `#3c3f43` e Amarelo Destaque `#ffc600`) com tema claro integrado ao ticket (`#f7f8f9` / `#ffffff`)
 - **Gerenciador de Pacotes**: **pnpm**
-- **Armazenamento**: `browser.storage.local` (assíncrono e persistente)
+- **Armazenamento**: `browser.storage.local` (assíncrono, sanitizado e persistente com fallback)
 - **Painel Lateral Firefox**: Suporte nativo a `sidebar_action`
 - **Painel Lateral Chromium**: Suporte integrado a `side_panel` (MV3)
 
@@ -45,53 +47,61 @@ Projetada especificamente para equipes de atendimento e suporte que utilizam o *
 ## ✨ Recursos Principais
 
 ### 1. 🏷️ Automação Inteligente de Licenças com Isolamento por Ticket
-- **Detecção Isolada por Ticket**: Valida se o chamado atual é de licenças (**Contratação**, **Troca** ou **Cancelamento**) estritamente dentro do contêiner do próprio ticket, sem interferir nem vazar para outros tickets abertos simultaneamente.
-- **Mudança Automática de Aba**: Alterna para **Anotação Interna** no ticket correspondente sem necessidade de cliques manuais.
-- **Marcação dos Responsáveis**:
+- **Detecção Ampla de Operações**: Reconhece chamados de **Contratação**, **Troca**, **Cancelamento** e **Renovação** de forma isolada dentro do contêiner do chamado atual, sem interferir nem vazar para outros tickets abertos em abas vizinhas.
+- **Validação Sob Demanda no Clique**: Elimina rotinas contínuas de varredura do DOM (zero overhead em segundo plano). A verificação é disparada sob demanda quando o usuário aciona a ação. Caso o chamado não contenha indícios de licença, exibe um diálogo preventivo de confirmação antes de prosseguir.
+- **Mudança Automática de Aba**: Alterna automaticamente para a aba de **Anotação Interna** no ticket correspondente com escopo expandido para garantir localização rápida do editor.
+- **Marcação Automática dos Responsáveis**:
   1. Digita `@Jorge` e seleciona automaticamente **Jorge Tigre** no popover de menções do Octadesk (`.note-children-container .person-item`).
   2. Digita `@roberto` e seleciona automaticamente **Roberto Renck**.
-- **Acionamento em 1 clique**: Pode ser acionado diretamente pelo botão flutuante da barra de abas, pelo **Popup** ou pelo **Painel Lateral**.
+- **Modularização de Alvos (`MentionTarget`)**: Estrutura tipada desacoplada e persistida via storage, permitindo futuras extensões e configurações personalizadas de alvos de menção.
+- **Agilidade e Bypass de Throttle**: Delays otimizados (redução de 15–20%) contornando o throttle de digitação em execuções sequenciais para que as menções ocorram sem falhas nem travamentos.
+- **Múltiplos Pontos de Acionamento**: Pode ser acionado diretamente pelo botão flutuante da barra do ticket, pelo **Popup** da barra de ferramentas ou pelo **Painel Lateral**.
 
-### 2. 🎯 Widget Flutuante Expansível na Barra de Resposta (Suporte a Múltiplos Tickets)
-- **Múltiplos Tickets Concorrentes**: Cada ticket aberto no Octadesk recebe sua própria instância do widget ancorada perfeitamente na barra de abas de resposta (`div.space-x-md`), persistindo e sincronizando quando você troca de abas.
-- **Inicia Fechado por Padrão**: O widget inicia discretamente recolhido exibindo apenas o ícone do polvo `[ 🐙 ]`. Se o ticket for de licença, exibe um discreto ponto pulsante amarelo indicativo.
-- **Expansão Horizontal**: Ao clicar no ícone, expande suavemente exibindo:
-  - `🏷️ Marcar (Contratação)` (se for ticket de licença daquele chamado)
-  - `📋 Respostas` (dropdown de respostas rápidas)
-  - `✕` (recolher)
-- **Totalmente Seguro contra Formulários**: Todos os botões possuem prevenção de eventos (`type="button"`, `stopPropagation`, `preventDefault`) para nunca disparar envio indevido de formulário.
+### 2. 🎯 Widget Flutuante Integrado à Barra de Resposta (Multi-Ticket)
+- **Isolamento por Ticket**: Cada ticket aberto no Octadesk recebe sua própria instância do widget ancorada diretamente na barra de comentários/resposta (`div.space-x-md`), persistindo e sincronizando quando você troca de chamados.
+- **Design Claro Harmonizado**: Fundo claro corporativo (`#f7f8f9` / `#ffffff`) com divisórias e bordas suaves em `#3c3f43`, integrado organicamente ao tema do Octadesk.
+- **Ícones Vetoriais SVG**: Interface 100% livre de emojis no DOM da página, utilizando ícones vetoriais SVG nítidos e padronizados.
+- **Inicia Recolhido por Padrão**: O widget inicia discretamente exibindo apenas a pílula com o logotipo do polvo `[ 🐙 ]`. Ao clicar, expande suavemente exibindo:
+  - **Marcar Licenças**: Botão com destaque amarelo para transição e marcação direta dos responsáveis.
+  - **Respostas**: Dropdown expansível com a listagem de todos os modelos cadastrados.
+  - **✕**: Botão para recolher a barra.
+- **Dropdown de Respostas com Rolagem Suave**: Menu vertical com rolagem estilizada (`max-height: min(260px, 50vh)`, `scrollbar-width: thin`), permitindo navegar confortavelmente por dezenas de mensagens cadastradas com visualização de título, categoria e preview do texto.
+- **Proteção Total contra Formulários**: Todos os botões possuem controle de eventos (`type="button"`, `stopPropagation`, `preventDefault`) para nunca disparar envios indesejados no formulário do ticket.
 
-### 3. 🦊 Suporte ao Painel Lateral (Sidebar) no Firefox e Chromium
-- Permite fixar o OctaBlaster na **barra lateral do Firefox e navegadores Chromium** (sem fechar quando você clica na página).
-- **No Firefox**: Pressione `Ctrl+B` (ou menu *Exibir* -> *Painel Lateral* -> *OctaBlaster*), ou abra o menu de opções (`...`) no popup e selecione **"Abrir no Painel Lateral"**.
-- **No Chrome / Chromium (MV3)**: Abra o menu de opções (`...`) dentro do popup e selecione **"Abrir no Painel Lateral"** para expandir o Side Panel nativo.
+### 3. 📝 Modelos de Resposta Padrão & Mensagens de Inatividade
+- **Templates Oficiais de Fábrica**: Já acompanha respostas prontas essenciais para o fluxo diário de atendimento:
+  - **Cobrança de Retorno (2º e 4º dia)**: Mensagem empática para acompanhamento de tickets aguardando resposta.
+  - **Encerramento por Falta de Retorno (6º dia)**: Mensagem informativa de conclusão de atendimento com aviso de reabertura fácil por e-mail.
+  - **Saudação e Em Análise**: Confirmação de recebimento e início de análise.
+  - **Solicitação de Prints / Evidências**: Roteiro objetivo para obtenção de imagens, passo a passo e horários de ocorrência.
+- **Migração Inteligente Não-Destrutiva**: Atualizações nos modelos padrão são migradas automaticamente sem sobrescrever nem remover os modelos criados manualmente pelo usuário.
 
-### 4. ☀️ Variáveis Dinâmicas Compartilhadas (`{{Saudacao}}`, `{{Data}}`, `{{Hora}}`)
-- Resolução centralizada tanto no popup quanto no widget in-page.
-- Detecta o horário de trabalho do atendente e preenche automaticamente:
+### 4. 🦊 Suporte Nativo ao Painel Lateral (Sidebar) no Firefox e Chromium
+- Permite manter o OctaBlaster fixo na barra lateral do navegador, operando lado a lado com os tickets sem fechar ao clicar na página.
+- **Firefox**: Ative via `Ctrl+B` (menu *Exibir* -> *Painel Lateral* -> *OctaBlaster*) ou selecione **"Abrir no Painel Lateral"** no menu Notion-style (`...`) do popup. Título nativo limpo e corporativo.
+- **Chrome / Chromium (MV3)**: Suporte à API nativa `side_panel`, acessível diretamente pelo menu do popup.
+- **Toolbar Otimizada**: Cabeçalho moderno com botão `SquarePen` para criação rápida de modelos, menu de utilitários e botão para fechar a barra lateral.
+
+### 5. ☀️ Variáveis Dinâmicas Inteligentes (`{{Saudacao}}`, `{{Data}}`, `{{Hora}}`)
+- Resolução centralizada compartilhada entre Popup, Painel Lateral e Widget in-page.
+- Reconhece variações com chaves duplas ou simples (`{{Saudacao}}`, `{Saudacao}`) e pontuações adjacentes (`{{Saudacao}}!`, `{{Saudacao}},`) sem duplicações:
   - **Manhã** (05:00 às 11:59): `Bom dia!`
   - **Tarde** (12:00 às 17:59): `Boa tarde!`
   - **Noite** (18:00 às 04:59): `Boa noite!`
-- Também suporta `{data}` e `{hora}` formatadas no padrão brasileiro.
+- Substituição automática de `{data}` e `{hora}` no padrão brasileiro (DD/MM/AAAA e HH:mm).
 
-### 5. 💾 Backup & Portabilidade: Exportação e Importação de Modelos (JSON)
-- Exporte todos os seus modelos de resposta em um arquivo `.json` com um clique no menu de opções Notion-style (`...` -> *Exportar modelos*).
-- Importe seus modelos em outra máquina ou navegador (`...` -> *Importar modelos*), com validação automática de esquema e mesclagem inteligente sem perda de dados.
-- **Restauração Segura**: O recurso de restauração de padrões agora solicita confirmação prévia e **preserva 100% dos modelos criados manualmente pelo usuário**.
+### 6. 💾 Portabilidade & Backup: Exportação e Importação de Modelos (JSON)
+- **Exportação com 1 Clique**: Salve todos os seus modelos e categorias em um arquivo `.json` estruturado.
+- **Importação Segura**: Mesclagem inteligente de modelos entre diferentes máquinas e navegadores com validação de esquema.
+- **Restauração com Confirmação**: O reset aos modelos de fábrica solicita confirmação prévia e **preserva integralmente todos os modelos personalizados criados pelo atendente**.
 
-### 6. 🔄 Verificação de Atualizações (GitHub Releases)
+### 7. 🔄 Verificação de Atualizações via GitHub Releases
 - Opção **"Verificar atualizações"** no menu Notion-style (`...`).
-- Consulta a API pública do GitHub Releases, compara a versão semântica instalada e exibe modal informativo quando houver nova versão com link direto para download/release.
+- Consulta a API pública do GitHub Releases, compara a versão instalada e exibe modal informativo quando houver nova versão com link direto para download do `.xpi` ou pacote Chromium.
 
-### 7. ⚡ Desempenho Otimizado com MutationObserver
-- Substitui loops de polling por um `MutationObserver` inteligente debouncado (200ms), reduzindo o uso de CPU e bateria em abas em segundo plano.
-
-### 8. 🛡️ Trava de Idempotência Anti-Duplicação
-- Previne colagens múltiplas acidentais causadas por múltiplos frames (`iframe.embedded__app_GUiYT`) ou cliques repetidos.
-
-### 9. 🐙 Identidade Visual & Ícones
-- Logotipo oficial com cor `#ffc600` em múltiplos formatos: vetor SVG (`public/icon.svg`), Windows ICO / Favicon (`public/icon.ico` e `public/favicon.ico`) e resoluções rasterizadas em PNG (16px, 32px, 48px, 96px, 128px e 256px).
-- Aplicado diretamente no cabeçalho do popup, no widget flutuante in-page e no manifesto da extensão.
+### 8. 🛡️ Estabilidade, Performance e Anti-Duplicação
+- **MutationObserver Debouncado**: Ciclo de vida otimizado sem loops de polling desnecessários, reduzindo o consumo de recursos da máquina.
+- **Trava de Idempotência**: Bloqueia inserções duplicadas acidentais causadas por cliques múltiplos ou frames aninhados (`iframe.embedded__app_GUiYT`).
 
 ---
 
@@ -129,6 +139,12 @@ A saída pronta para carregar será gerada na pasta `.output/firefox-mv2`.
 pnpm build
 ```
 A saída pronta para carregar será gerada na pasta `.output/chrome-mv3`.
+
+### 7. Empacotar arquivos ZIP para distribuição
+```bash
+pnpm zip          # Gera .zip para Chrome/Chromium
+pnpm zip:firefox  # Gera .zip para Firefox
+```
 
 ---
 
@@ -170,3 +186,14 @@ Se você já carregou a extensão temporária anteriormente e gerou um novo buil
 3. Na seção **"Extensões temporárias"**, localize o **OctaBlaster**.
 4. Clique no botão **"Recarregar"** (*Reload*).
 5. Pronto! O Firefox recarrega instantaneamente todos os novos scripts e manifestos sem precisar reconfigurar nada.
+
+---
+
+## 💬 Sugestões, Melhorias e Reporte de Erros
+
+O desenvolvimento do OctaBlaster é contínuo e aberto! Seja você membro da equipe ou usuário da comunidade, sua colaboração é fundamental:
+
+- **Quer sugerir uma melhoria, nova mensagem padrão ou discutir ideias?**
+  Participe das nossas conversas no [**GitHub Discussions**](https://github.com/luizGDpulz/octa-blaster/discussions)!
+- **Encontrou um erro, bug ou falha de comportamento no Octadesk?**
+  Abra um reporte detalhado na aba de [**Issues**](https://github.com/luizGDpulz/octa-blaster/issues).
