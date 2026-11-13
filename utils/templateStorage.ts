@@ -3,20 +3,29 @@ import type { QuickReplyTemplate } from '@/types/template';
 export const STORAGE_KEY = 'octablaster_quick_replies_v2';
 export const HAS_INITIALIZED_KEY = 'octablaster_initialized_v2';
 
+const LEGACY_INACTIVITY_CONTENTS: Record<string, string> = {
+  'inatividade-2-4':
+    '{{Saudacao}}\n\nAlgum retorno sobre este ticket? Caso contrário o mesmo será encerrado.',
+  'inatividade-6':
+    '{{Saudacao}}\n\nNão recebemos retorno do último e-mail enviado e não havendo mais interações neste canal de atendimento, estaremos marcando este ticket como resolvido. Caso tenha alguma novidade sobre o assunto, basta responder este e-mail que reabriremos o caso.',
+};
+
 export const DEFAULT_TEMPLATES: QuickReplyTemplate[] = [
   {
     id: 'inatividade-2-4',
     title: 'Cobrança de Retorno (2º e 4º dia)',
-    content: '{{Saudacao}}\n\nAlgum retorno sobre este ticket? Caso contrário o mesmo será encerrado.',
+    content:
+      '{{Saudacao}}\n\nGostaria de verificar se há algum retorno ou atualização sobre este ticket. Fico no aguardo da sua resposta.',
     category: 'Inatividade',
-    updatedAt: 1700000000000,
+    updatedAt: 1700000000001,
   },
   {
     id: 'inatividade-6',
     title: 'Encerramento por Falta de Retorno (6º dia)',
-    content: '{{Saudacao}}\n\nNão recebemos retorno do último e-mail enviado e não havendo mais interações neste canal de atendimento, estaremos marcando este ticket como resolvido. Caso tenha alguma novidade sobre o assunto, basta responder este e-mail que reabriremos o caso.',
+    content:
+      '{{Saudacao}}\n\nComo não tivemos retorno ao nosso último e-mail, vamos marcar este ticket como resolvido por enquanto.\n\nMas não se preocupe! Se tiver alguma novidade ou precisar continuar tratando desse assunto, basta responder a este e-mail que reabriremos o atendimento para dar continuidade.',
     category: 'Inatividade',
-    updatedAt: 1700000000000,
+    updatedAt: 1700000000001,
   },
   {
     id: 'saudacao-geral',
@@ -215,7 +224,28 @@ export async function loadStoredTemplates(): Promise<QuickReplyTemplate[]> {
     }
 
     if (Array.isArray(stored)) {
-      return sanitizeTemplatesList(stored);
+      const sanitized = sanitizeTemplatesList(stored);
+      let migrated = false;
+      const defaultMap = new Map(DEFAULT_TEMPLATES.map((t) => [t.id, t]));
+
+      const updated = sanitized.map((item) => {
+        const legacyContent = LEGACY_INACTIVITY_CONTENTS[item.id];
+        const nextDefault = defaultMap.get(item.id);
+        if (legacyContent && nextDefault && item.content === legacyContent) {
+          migrated = true;
+          return {
+            ...item,
+            content: nextDefault.content,
+            updatedAt: nextDefault.updatedAt,
+          };
+        }
+        return item;
+      });
+
+      if (migrated) {
+        await rawStorageSet({ [STORAGE_KEY]: updated });
+      }
+      return updated;
     }
 
     return [];
