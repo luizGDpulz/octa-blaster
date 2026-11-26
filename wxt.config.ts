@@ -8,7 +8,8 @@ export default defineConfig({
     name: 'OctaBlaster - Respostas Rápidas Octadesk',
     description: 'Respostas prontas automatizadas, injeção rápida de texto e automação de licenças para tickets no Octadesk',
     version: packageInfo.version,
-    permissions: ['storage', 'activeTab', 'tabs'],
+    permissions: ['storage', 'activeTab', 'tabs', 'clipboardWrite', 'alarms'],
+    optional_host_permissions: ['https://*/*'],
     host_permissions: ['*://app.octadesk.com/*', '*://*.octadesk.com/*'],
     browser_specific_settings: {
       gecko: {
@@ -36,6 +37,10 @@ export default defineConfig({
   },
   hooks: {
     'build:manifestGenerated': (_wxt, manifest) => {
+      // WXT remove optional_host_permissions no MV2; Firefox usa optional_permissions.
+      if (manifest.manifest_version === 2) {
+        manifest.optional_permissions = [...(manifest.optional_permissions || []), 'https://*/*'];
+      }
       if (manifest.sidebar_action) {
         (manifest.sidebar_action as any).default_title = 'OctaBlaster';
         (manifest.sidebar_action as any).default_icon = {

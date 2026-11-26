@@ -38,13 +38,19 @@ Projetada especificamente para equipes de atendimento e suporte que utilizam o *
 - **Linguagem**: [TypeScript](https://www.typescriptlang.org/)
 - **Design System**: Paleta corporativa inspirada no **Secullum VMS** (padrão `#ffc600`) com suporte nativo a **Tema Claro, Escuro e Sistema**, **Cor da marca** e **Cor secundária** personalizáveis e **Tags coloridas** de alto contraste
 - **Gerenciador de Pacotes**: **pnpm**
-- **Armazenamento**: `browser.storage.local` (assíncrono, sanitizado e persistente com fallback)
+- **Armazenamento**: `browser.storage.local` para templates e preferências; IndexedDB privado para chats, contextos e credenciais da IA.
 - **Painel Lateral Firefox**: Suporte nativo a `sidebar_action`
 - **Painel Lateral Chromium**: Suporte integrado a `side_panel` (MV3)
 
 ---
 
 ## ✨ Recursos Principais
+
+### Assistente de IA local (em desenvolvimento)
+
+Resumos de e-mail e ticket abrem o chat no painel lateral nativo, com histórico por ticket, cópia, edição de perguntas e **Inserir no ticket** em cada mensagem da IA. Para preparar uma resposta, digite a orientação no próprio editor e clique no ícone de IA no canto superior direito. A orientação é guardada, o campo é limpo e o resultado aparece diretamente nele, sem abrir o chat. Se a geração falhar, a orientação é restaurada quando não houve outra edição. Não há modal ou input extra; nenhuma resposta é enviada automaticamente ao cliente.
+
+A IA funciona inteiramente na extensão por APIs OpenAI, Gemini, Claude, NVIDIA ou compatíveis com OpenAI. O campo do chat reúne controles de tokens e raciocínio por envio, com opções conforme a API/modelo, em um compositor de tema claro. Configure URL, modelo e chave em Inteligência artificial → Conexões de API. Não exige auxiliar, terminal nem servidor. Mantém chats por ticket, prompts configuráveis, aprendizado de escrita e retenção. Consulte [IA por APIs: configuração, arquitetura e limites](docs/IA-APIS.md).
 
 ### 1. 🏷️ Automação Inteligente de Licenças com Isolamento por Ticket
 - **Detecção Ampla de Operações**: Reconhece chamados de **Contratação**, **Troca**, **Cancelamento** e **Renovação** de forma isolada dentro do contêiner do chamado atual, sem interferir nem vazar para outros tickets abertos em abas vizinhas.

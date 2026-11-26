@@ -16,6 +16,19 @@ body {
   height: 100% !important;
 }
 
+/* Firefox does not select text inside native buttons by default. */
+.popup-container,
+.popup-container * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.popup-container .drag-handle,
+.popup-container .drag-handle * {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 .popup-container {
   width: 100% !important;
   height: 100vh !important;

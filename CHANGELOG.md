@@ -7,6 +7,20 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 
 ## [Não lançado]
 
+### Adicionado
+- Configurações de IA organizadas em Conta e conexões, Aprendizado e escrita, Prompts e instruções e Histórico e retenção. Prompts editáveis para os três recursos, restauração de padrão, conflitos detectados e atualização dos resumos conforme a instrução efetiva. Campos unificados ao layout da extensão e seção Primeiro uso removida.
+- Tela Meu aprendizado e escrita mostra os padrões numéricos do atendente ativo e permite pausar/apagar o aprendizado. Início e encerramento configuráveis por atendente: automático, texto personalizado ou sem saudação/despedida; aplicação local sem consulta extra à IA.
+- Resumos estruturados distintos para ticket e mensagem: objetivo/status/evolução/pendências no ticket; remetente/assunto/resumo/detalhes/ação esperada no e-mail. Títulos destacados, dados ausentes explícitos e atualização dos resumos antigos sem apagar conversa ou pergunta não enviada.
+- Proposta 1.3.0 / auxiliar 0.3.3: resumos de e-mail e ticket abrem o chat no painel lateral nativo. Conversas e perguntas não enviadas persistem por ticket; cada resposta permite copiar e inserir no editor original, e perguntas podem ser editadas.
+- Ícone de IA no editor público: usa a orientação digitada, limpa o campo e preenche a resposta diretamente nele, sem abrir o chat. Em erro restaura a orientação se não houve edição; texto novo nunca é sobrescrito. Sem envio automático ao cliente.
+- APIs OpenAI, Gemini, Claude, NVIDIA e gateway opcional de equipe, com credenciais protegidas, continuação remota quando suportada e contexto compacto nos demais casos. Login ChatGPT e inicialização do auxiliar via Native Messaging no Firefox/Windows após instalação gráfica única.
+- Retenção configurável, padrões numéricos de escrita aprendidos após publicação confirmada e proteção contra assinatura do destinatário. Não há formulário de perfil nem exemplos de respostas arquivados.
+
+### Alterado
+- Modais, prévias flutuantes e campo separado de orientação substituídos pelo chat lateral. Controles compactos usam as cores da extensão.
+- Cache temporário de resumos idênticos e recuperação da conversa evitam consultas repetidas. Orçamentos de saída menores nas APIs e exclusões remotas fora do caminho da geração reduzem espera evitável.
+- Última release oficial 1.0.1 e main `ff7752d` incorporadas. Esta proposta depende de revisão dos mantenedores; nenhuma release ou tag foi publicada.
+
 ---
 
 ## [1.0.1] - 2026-11-19

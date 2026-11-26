@@ -8,12 +8,12 @@ test('content insertion requires its registered editor and ignores forged window
   const storage = installStorage();
   const previousDefine = globalThis.defineContentScript;
   const previousTimeout = globalThis.setTimeout;
-  let listener;
+  const listeners = [];
   let token;
   globalThis.defineContentScript = (definition) => definition;
   globalThis.browser.runtime = {
     id: 'test-extension',
-    onMessage: { addListener(fn) { listener = fn; } },
+    onMessage: { addListener(fn) { listeners.push(fn); }, removeListener() {} },
     async sendMessage(message) { token = message.editorToken; },
   };
   dom.window.HTMLElement.prototype.getBoundingClientRect = () => ({ width: 500, height: 100, top: 0, left: 0, bottom: 100, right: 500 });
@@ -31,7 +31,7 @@ test('content insertion requires its registered editor and ignores forged window
     assert.equal(a.value, '');
     const request = (message, sender = { id: 'test-extension' }) => {
       let response;
-      listener(message, sender, (value) => { response = value; });
+      for (const listener of listeners) listener(message, sender, (value) => { response = value; });
       return response;
     };
     assert.equal(request({ action: 'INSERT_REPLY', content: 'wrong', editorToken: 'unknown' }).success, false);

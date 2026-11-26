@@ -1,8 +1,10 @@
 # Arquitetura e pontos de extensão
 
-O projeto mantém WXT, Vue 3 e TypeScript, sem backend adicional. A estrutura é organizada por domínio: pontos de entrada enxutos em `entrypoints/`, componentes Vue modulares em `components/`, composables em `composables/`, serviços e regras em `services/`, contratos em `types/` e documentação em `docs/`.
+O projeto mantém WXT, Vue 3 e TypeScript. As funções de respostas e licenças executam na extensão; a integração opcional de IA chama APIs diretamente no background da extensão, sem programas externos. A estrutura é organizada por domínio: pontos de entrada enxutos em `entrypoints/`, componentes Vue modulares em `components/`, composables em `composables/`, serviços e regras em `services/`, contratos em `types/` e documentação em `docs/`.
+
 
 ## Responsabilidades
+
 
 | Camada | Arquivos | Responsabilidade |
 | --- | --- | --- |
@@ -58,6 +60,8 @@ Widgets e atalhos capturam o editor, a identidade do ticket e o rascunho antes d
 
 ## Persistência e compatibilidade
 
+Conversas da IA usam uma chave privada `octablaster_ticket_chat_v1_<sha256>` por origem/workspace/ticket. `ticketChatPersistence.ts` gera a identidade estável sem depender de query, hash ou rota de entrada. `aiChatStorage.ts` expõe o repositório modular de `services/storage/history/`, com revisão otimista e transações no IndexedDB `octablaster-history`. Metadados indexados, mensagens individuais, rascunhos e contextos por referência ficam em armazenamentos separados. O menu pagina 30 metadados; a abertura lê 60 mensagens e permite buscar as anteriores. Rascunhos têm debounce de 600 ms e gravação independente. Não há backup no armazenamento da página nem alteração no formato de backup dos templates. O HTML original do atendimento não é arquivado. A restauração não solicita inferência; perguntas subsequentes combinam histórico limitado e contexto atual do ticket.
+
 | Chave | Conteúdo |
 | --- | --- |
 | `octablaster_quick_replies_v2` | Mensagens, ordem e associações com tags. |
@@ -87,9 +91,33 @@ Sem formulário reconhecido, permanece a marcação de técnicos. Formulário re
 
 ## Como adicionar funcionalidades
 
+
 - **Nova regra de variável:** altere a validação em `settingsSchema.ts` ou a resolução em `templateVariables.ts`; mantenha valores substituídos literais e preserve o cancelamento.
 - **Novo cadastro:** defina contratos e validação, implemente persistência na fila do background, use uma base para detectar conflitos e só então conecte o formulário Vue. Atualize o backup quando o dado precisar ser transportável.
 - **Novo canal de respostas:** reutilize `replyList.ts` e `prepareTemplate`; valide novamente o editor após qualquer espera e escreva apenas no rascunho.
 - **Novo formulário de licença:** acrescente a leitura em `licenseRequest.ts` com HTML anonimizado e casos de campo ausente, ambiguidade e outro ticket. Preserve os tokens nativos durante a inserção.
 
 Não são necessárias novas dependências, serviços externos ou um framework de arquitetura para essas extensões. Os testes, tipos e builds descritos em [CONTRIBUTING.md](../CONTRIBUTING.md) verificam os contratos entre os módulos.
+
+## IA no painel lateral (1.3.0)
+
+`aiSummaryLifecycle.ts` ancora os controles; `aiPanelBridge.ts` extrai contexto, mantém referências ao ticket/editor e valida snapshots de inserção. `aiTrigger.ts` mostra processamento e erros nos controles da página; o Chrome abre a lateral no background. No Firefox, a lateral aberta recebe o chat; quando fechada, o popup oferece uma ação nativa para abri-la com um gesto autorizado. O iframe de gatilho foi removido. `aiPanelRouter.ts` controla sessões por janela, persistência por ticket, cache limitado, cancelamento e geração via `aiRouter.ts` e `services/ai/api/`. `AiChatPanel.vue` apresenta mensagens e ações de cópia/edição/inserção sem HTML gerado. Os módulos antigos de modal/popover de IA foram removidos.
+
+O modelo recebe autor/papel dos cabeçalhos quando conhecidos. O HTML bruto não é arquivado; persistem mensagens do chat, rascunhos e o contexto extraído em texto e trecho HTML sanitizado do contêiner do ticket para retomada pelo histórico, sob a mesma retenção. Chats independentes usam tarefa general com instruções próprias e chaves aleatórias; tickets preservam sua chave estável. `api/engine.ts` mantém o contexto por conversa; `api/retention.ts` trata expiração/exclusão remota fora da inferência. O transporte autenticado e os adaptadores ficam em `api/transport.ts` e `api/providers/`. As chaves ficam em IndexedDB da origem da extensão, fora dos backups e do storage acessível aos content scripts. `writingMemory.ts` guarda somente estatísticas numéricas de respostas publicadas. Nenhuma automação envia a resposta ao cliente.
+
+`aiReplyGeneration.ts` gera diretamente no editor público: captura a orientação, limpa o campo, conserva a restauração local para erros e revalida identidade/editor/conteúdo antes de preencher. Digitação cancela o resultado pendente; nenhuma conversa lateral é criada. `AI_PANEL_SHOW` reabre um resumo em curso sem reiniciar a inferência.
+
+O contexto da conversa é definido explicitamente na abertura: o ícone/Nova conversa cria um chat sem contexto; somente os botões de resumo associam dados do atendimento. A navegação da página não seleciona outra conversa nem introduz dados de outro ticket. Perguntas no chat usam a chave já associada, sem interpretar números no texto.
+
+O roteador mantém conversas vazias em memória e persiste no primeiro envio. Nova conversa usa uma chave independente, preservando o chat anterior. Reabrir pelo resumo recupera a conversa canônica do ticket; títulos personalizados são metadados locais e não alteram sua identidade.
+
+A configuração e os contratos dos módulos de API estão documentados em [IA por APIs](IA-APIS.md).
+
+### Contexto independente da aba ativa
+
+`aiTicketStore.ts` mantém os metadados do ticket separados do histórico no mesmo IndexedDB, compartilhando textos de contexto pelo hash e contagem de referências. A migração remove cada original de storage.local somente após o commit; o orçamento global é de 50 MB estimados. A limpeza usa índices/lotes de 100 e alarme horário do navegador. `aiRetention.ts` aplica a retenção a ambos. `ai/ticketContext.ts` resolve o contexto da fonte original ou dos dados locais usando a chave vinculada à conversa. Os botões de resumo são a única origem de associação com uma página; o ícone e Nova conversa não leem a aba ativa. A interface é única e não expõe modos separados. A extração automática de números e o registro periódico de tickets da página foram removidos.
+
+
+### Controles de geração por solicitação
+
+`AiChatComposer.vue` reúne texto, menus de tokens/raciocínio e envio em tema claro. `useAiRequestOptions.ts` guarda escolhas efêmeras e captura opções/revisão para o próximo envio. A configuração da conexão não contém mais tokens. `requestOptions.ts` valida a mensagem pública e `api/reasoning.ts` traduz somente escolhas compatíveis, sem desligamento automático por nome. O motor verifica a revisão ativa, separa teto de saída e orçamento de raciocínio e inclui a política no fingerprint remoto. Parâmetros não são gravados nos chats e não alteram o contexto vinculado ao ticket.

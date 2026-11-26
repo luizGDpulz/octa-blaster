@@ -1,0 +1,9 @@
+import { ensureInpageThemeTokens } from '@/services/appearance/inpageTheme';
+export function ensureSummaryStyles(doc: Document) {
+  ensureInpageThemeTokens(doc); if (doc.getElementById('octa-summary-styles')) return;
+  const style = doc.createElement('style'); style.id = 'octa-summary-styles';
+  style.textContent = `
+  .octa-summary-button{display:inline-flex!important;align-items:center!important;align-self:center!important;justify-content:center!important;gap:4px!important;box-sizing:border-box!important;height:20px!important;min-height:0!important;max-height:20px!important;font:500 11px/1.3 system-ui!important;border:1px solid var(--accent-border)!important;border-radius:6px!important;padding:1px 6px!important;background:var(--accent-soft)!important;color:var(--accent-soft-text)!important;cursor:pointer!important;margin-inline-start:8px!important;white-space:nowrap!important}.octa-summary-button svg{width:11px!important;height:11px!important}.octa-message-tools{display:flex;justify-content:flex-end;align-items:center;padding:4px 10px;min-height:28px}.octa-editor-ai-button{position:absolute!important;top:8px!important;right:8px!important;z-index:20!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;width:26px!important;height:26px!important;padding:5px!important;border:1px solid var(--accent-border)!important;border-radius:7px!important;background:var(--accent-soft)!important;color:var(--accent-soft-text)!important;cursor:pointer!important}.octa-editor-ai-button[hidden]{display:none!important}.octa-editor-ai-button svg{width:14px!important;height:14px!important}
+  iframe.octa-summary-button{border:0!important;padding:0!important;height:22px!important;max-height:22px!important;background:transparent!important}iframe.octa-editor-ai-button{border:0!important;padding:0!important;background:transparent!important;height:28px!important;width:28px!important}
+  `; doc.head.append(style);
+}

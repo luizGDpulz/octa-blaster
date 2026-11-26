@@ -1,8 +1,8 @@
 {
   "name": "octa-blaster",
-  "description": "Extensão para envio de respostas rápidas em tickets de helpdesk",
+  "description": "ExtensÃ£o para envio de respostas rÃ¡pidas em tickets de helpdesk",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.3.0",
   "type": "module",
   "license": "AGPL-3.0-or-later",
   "scripts": {
@@ -24,6 +24,7 @@
   },
   "devDependencies": {
     "@wxt-dev/module-vue": "^1.0.3",
+    "fake-indexeddb": "^6.2.8",
     "jsdom": "^31.0.1",
     "sharp": "^0.35.5",
     "typescript": "^5.9.3",

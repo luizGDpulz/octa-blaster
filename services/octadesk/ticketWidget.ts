@@ -1,3 +1,7 @@
+import { createAiTrigger } from './aiTrigger';
+import { generateTicketReply } from './aiReplyGeneration';
+import { readAiMessage } from './aiTicketContext';
+import { aiIcons } from './aiIcons';
 import { insertTextIntoElement } from './insertText';
 import {
   detectLicenseTicket,
@@ -150,6 +154,7 @@ function ensureWidgetStyles(doc: Document = document) {
       display: block !important;
       color: var(--accent, #ffc600) !important;
     }
+    iframe.octa-action-btn {padding:0!important;border:0!important;background:transparent!important;height:22px!important;width:135px!important}
     .octa-bar-actions {
       display: flex;
       align-items: center;
@@ -334,6 +339,7 @@ function createWidgetElement(
           <span>Respostas</span>
         </button>
 
+        <span class="octa-ai-trigger-slot"></span>
         <button type="button" class="octa-min-btn octa-btn-minimize" title="Recolher">${ICONS.x}</button>
       </div>
 
@@ -346,6 +352,13 @@ function createWidgetElement(
     </div>
   `;
 
+  const aiTrigger = createAiTrigger(doc, 'Sugerir resposta', (opened, report) => {
+    const editor = editorContext.findEditorForWidget(container), scope = editor && getScopedTicketContainer(editor);
+    if (!editor || !scope || !readAiMessage(editor).trim()) throw new Error('Digite no editor como deseja responder e clique no ícone de IA.');
+    licenseFeedback.hidden = true; return generateTicketReply(editor, report);
+  }, { opensSidebar: false });
+  aiTrigger.element.className = 'octa-action-btn octa-btn-ai'; widget.querySelector('.octa-ai-trigger-slot')!.replaceWith(aiTrigger.element);
+  aiTrigger.element.addEventListener('mousedown', event => event.preventDefault());
   const btnToggle = widget.querySelector('.octa-btn-toggle') as HTMLElement;
   const btnLicense = widget.querySelector('.octa-btn-license') as HTMLButtonElement;
   const btnReplies = widget.querySelector('.octa-btn-replies') as HTMLElement;

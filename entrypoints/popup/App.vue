@@ -37,6 +37,8 @@ import TagsView from '@/components/settings/TagsView.vue';
 import ShortcutsView from '@/components/settings/ShortcutsView.vue';
 import TechniciansView from '@/components/settings/TechniciansView.vue';
 import AppearanceView from '@/components/settings/AppearanceView.vue';
+import AiChatPanel from '@/components/ai/AiChatPanel.vue';
+import AiSettingsView from '@/components/settings/AiSettingsView.vue';
 
 const GITHUB_REPO_URL = 'https://github.com/luizGDpulz/octa-blaster';
 const GITHUB_DISCUSSIONS_URL = 'https://github.com/luizGDpulz/octa-blaster/discussions';
@@ -87,6 +89,17 @@ const isSidebar = computed(() => {
   if (typeof window === 'undefined') return false;
   return window.location.href.includes('sidepanel') || window.location.pathname.includes('sidepanel');
 });
+
+let aiWindowId = 0;
+const pendingSidebar = ref(false);
+async function openRequestedSidebar() {
+  try { const opened = (browser as any).sidebarAction.open(); await opened; await browser.runtime.sendMessage({action:'AI_PANEL_ACTIVATE',windowId:aiWindowId}); window.close(); } catch(error) {setStatus(error instanceof Error ? error.message : 'Não foi possível abrir a lateral.','error');}
+}
+async function revealRequestedChat() {
+  const result = await browser.runtime.sendMessage({ action: 'AI_PANEL_REVEAL', windowId: aiWindowId });
+  if (result?.success && result.data) { currentView.value = 'ai-chat'; }
+}
+const panelNotification = (message: any) => { if (isSidebar.value && message.action === 'AI_PANEL_CHANGED' && message.reveal && message.windowId === aiWindowId) void revealRequestedChat().catch(() => {}); };
 
 function setStatus(msg: string, type: 'success' | 'error' | 'info' = 'info') {
   statusMessage.value = msg;
@@ -161,13 +174,22 @@ async function refreshTagsAndTemplates() {
   await loadTemplates();
 }
 
-function openView(view: PopupView) {
+async function openView(view: PopupView) {
+  if(view==='ai-chat') {
+    try {
+      const windowId=(await browser.windows.getCurrent()).id!;
+      const result=await browser.runtime.sendMessage({action:'AI_PANEL_NEW',windowId});
+      if(!result?.success)throw new Error(result?.error || 'Não foi possível iniciar a conversa.');
+    }catch(error){setStatus(error instanceof Error ? error.message : 'Não foi possível iniciar a conversa.','error');return;}
+  }
   headerRef.value?.closeMenu();
   listRef.value?.closeCardMenu();
   statusMessage.value = '';
   if (currentView.value !== view) viewHistory.push(currentView.value);
   currentView.value = view;
 }
+
+function backFromAiChat() { viewHistory.length = 0; currentView.value = 'templates'; void refreshCatalogs(); }
 
 function returnToPreviousView() {
   currentView.value = viewHistory.pop() || 'templates';
@@ -471,6 +493,7 @@ async function checkSidebarSupport() {
 }
 
 async function openSidebarPanel() {
+  if (pendingSidebar.value) return openRequestedSidebar();
   try {
     const b = browser as any;
     const c = (globalThis as any).chrome;
@@ -516,6 +539,11 @@ onMounted(() => {
   void loadTemplates().then(refreshCatalogs);
   void checkLicenseStatus();
   void checkSidebarSupport();
+  if (!isSidebar.value) { void browser.windows.getCurrent().then(async win => {aiWindowId=win.id!;const result=await browser.runtime.sendMessage({action:'AI_PANEL_ACCESS',windowId:aiWindowId});pendingSidebar.value=!!result?.data;}).catch(()=>{}); }
+  if (isSidebar.value) {
+    browser.runtime.onMessage.addListener(panelNotification);
+    void browser.windows.getCurrent().then(async win => { aiWindowId = win.id!; await revealRequestedChat(); }).catch(() => {});
+  }
   document.addEventListener('keydown', handleEscape);
 });
 
@@ -523,11 +551,22 @@ onUnmounted(() => {
   stopWatchingAppearance?.();
   stopWatchingAppearance = null;
   document.removeEventListener('keydown', handleEscape);
+  browser.runtime.onMessage.removeListener(panelNotification);
 });
+function preserveTextSelection(event: MouseEvent) {
+  if (!isSidebar.value || event.detail === 0) return;
+  const button = (event.target as Element)?.closest?.('button');
+  const selection = window.getSelection();
+  if (button && selection && !selection.isCollapsed && selection.toString().trim() &&
+      button.contains(selection.anchorNode) && button.contains(selection.focusNode)) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+}
 </script>
 
 <template>
-  <div class="popup-container">
+  <div class="popup-container" @click.capture="preserveTextSelection">
     <AppHeader
       ref="headerRef"
       :is-sidebar="isSidebar"
@@ -547,6 +586,7 @@ onUnmounted(() => {
       @open-discussions="openExternalUrl(GITHUB_DISCUSSIONS_URL)"
     />
 
+    <div v-if="pendingSidebar && !isSidebar" class="sidebar-request" role="status"><p>Continue com o resumo do ticket no painel lateral.</p><button type="button" @click="openRequestedSidebar">Abrir resumo na lateral</button></div>
     <transition name="fade">
       <div v-if="statusMessage" :class="['status-banner', `status-${statusType}`]">
         <span class="status-icon">
@@ -573,6 +613,8 @@ onUnmounted(() => {
       @back="returnToPreviousView"
       @changed="refreshCatalogs"
     />
+    <AiChatPanel v-else-if="currentView === 'ai-chat'" @back="backFromAiChat" />
+    <AiSettingsView v-else-if="currentView === 'ai'" @back="returnToPreviousView" />
     <TechniciansView
       v-else-if="currentView === 'technicians'"
       @back="returnToPreviousView"
@@ -651,6 +693,8 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.sidebar-request{padding:12px;background:var(--accent-soft);color:var(--text-primary);font-size:12px}.sidebar-request button{width:100%;padding:10px;border:0;border-radius:6px;background:var(--accent);color:var(--accent-text);cursor:pointer}
+
 .popup-container {
   display: flex;
   flex-direction: column;
